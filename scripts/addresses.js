@@ -17,14 +17,6 @@ function loadAddressesView() {
                             <button id="search-address">Search</button>
                         </div>
                     </div>
-                    <div class="address-popular">
-                        <h3>Examples</h3>
-                        <p>Try these example addresses:</p>
-                        <ul class="address-examples">
-                            <li><a href="#" class="address-example">eHNUGzw8ZG9PGC8gKtnneyMaQXQTtAUm98</a></li>
-                            <li><a href="#" class="address-example">ELBcgjWDFQGTMxotB8FRXBdkBccJCGiKmT</a></li>
-                        </ul>
-                    </div>
                 </div>
             `;
             
@@ -48,15 +40,6 @@ function loadAddressesView() {
                         UI.showNotification('Error', 'Please enter a valid Evrmore address.', 'error');
                     }
                 }
-            });
-            
-            // Add example address click handlers
-            document.querySelectorAll('.address-example').forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const address = e.target.textContent.trim();
-                    window.app.navigateToAddressDetails(address);
-                });
             });
         }
     } catch (error) {

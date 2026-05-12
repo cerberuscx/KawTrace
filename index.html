@@ -12,40 +12,39 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Header with search bar -->
-        <header class="header">
-            <div class="header-content">
-                <!-- Replace the current logo-container with this code -->
-<div class="logo-container">
-    <a href="#" id="logo-link" class="logo-link">
-        <img src="img/logo.svg" alt="Evrmore logo" class="logo">
-        
-    </a>
-</div>
-
-                <div class="search-container">
-                    <form id="search-form">
-                        <input type="text" id="search-input" placeholder="Search by block height, hash, transaction ID, address, or asset...">
-                        <button type="submit"><i class="fas fa-search"></i></button>
-                    </form>
+        <div class="app-top-chrome" id="app-top-chrome">
+            <header class="header">
+                <div class="header-content">
+                    <div class="logo-container">
+                        <a href="#" id="logo-link" class="logo-link">
+                            <img src="img/logo.svg" alt="Evrmore logo" class="logo">
+                        </a>
+                    </div>
+                    <h1 id="explorer-page-title" class="explorer-page-title">Evrmore Blockchain</h1>
+                    <div class="network-status">
+                        <span id="connection-status"><i class="fas fa-plug"></i> Connected</span>
+                        <span id="block-height"><i class="fas fa-cube"></i> Loading...</span>
+                    </div>
                 </div>
-                <div class="network-status">
-                    <span id="connection-status"><i class="fas fa-plug"></i> Connected</span>
-                    <span id="block-height"><i class="fas fa-cube"></i> Loading...</span>
+            </header>
+            <nav class="main-nav">
+                <div class="main-nav-inner">
+                    <ul>
+                        <li><a href="#" data-view="dashboard" class="active">Dashboard</a></li>
+                        <li><a href="#" data-view="blocks">Blocks</a></li>
+                        <li><a href="#" data-view="transactions">Transactions</a></li>
+                        <li><a href="#" data-view="addresses">Addresses</a></li>
+                        <li><a href="#" data-view="assets">Assets</a></li>
+                    </ul>
+                    <div class="search-container">
+                        <form id="search-form">
+                            <input type="text" id="search-input" placeholder="Search by block height, hash, transaction ID, address, or asset...">
+                            <button type="submit"><i class="fas fa-search"></i></button>
+                        </form>
+                    </div>
                 </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="main-nav">
-            <ul>
-                <li><a href="#" data-view="dashboard" class="active">Dashboard</a></li>
-                <li><a href="#" data-view="blocks">Blocks</a></li>
-                <li><a href="#" data-view="transactions">Transactions</a></li>
-                <li><a href="#" data-view="addresses">Addresses</a></li>
-                <li><a href="#" data-view="assets">Assets</a></li>
-            </ul>
-        </nav>
+            </nav>
+        </div>
 
         <!-- Main content area -->
         <main id="main-content">

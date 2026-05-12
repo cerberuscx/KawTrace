@@ -305,21 +305,37 @@ async function search(term) {
     UI.showNotification('Not Found', `Could not identify "${term}" as a valid block, transaction, address, or asset.`, 'error');
 }
 
+function chainToExplorerTitle(chain) {
+    if (chain === 'main') return 'Evrmore Mainnet Blockchain';
+    if (chain === 'test') return 'Evrmore Testnet Blockchain';
+    if (chain === 'regtest') return 'Evrmore Regtest Blockchain';
+    return 'Evrmore Blockchain';
+}
+
 // Update network status display
 async function updateNetworkStatus() {
+    const titleEl = document.getElementById('explorer-page-title');
     try {
-        const blockHeight = await window.utilities.getBlockCount();
+        const info = await window.utilities.getBlockChainInfo();
+        const blockHeight = info.blocks;
         appState.currentBlockHeight = blockHeight;
-        
+
         document.getElementById('block-height').innerHTML = `<i class="fas fa-cube"></i> Block Height: ${blockHeight.toLocaleString()}`;
         document.getElementById('connection-status').innerHTML = `<i class="fas fa-plug"></i> Connected`;
         document.getElementById('connection-status').style.color = 'var(--success-color)';
-        
+
+        const title = chainToExplorerTitle(info.chain);
+        if (titleEl) titleEl.textContent = title;
+        document.title = `${title} | Explorer`;
+
         appState.isConnected = true;
     } catch (error) {
+        if (titleEl) titleEl.textContent = 'Evrmore Blockchain';
+        document.title = 'Connor Evrmore Blockchain Explorer';
+
         document.getElementById('connection-status').innerHTML = `<i class="fas fa-plug"></i> Disconnected`;
         document.getElementById('connection-status').style.color = 'var(--danger-color)';
-        
+
         appState.isConnected = false;
     }
 }
