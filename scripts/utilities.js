@@ -11,7 +11,7 @@ let ASSET_DATA_CACHE_DURATION = 86400000; // 24 hours for asset data
 let INDEFINITE_CACHE = 31536000000; // ~1 year (for immutable data)
 
 // RPC Configuration
-let RPC_URL = 'https://evr-rpc-mainnet.ting.finance/rpc/';
+let RPC_URL = "/rpc";
 let MAX_CONCURRENT_REQUESTS = 50;
 
 // Function to update cache durations from settings

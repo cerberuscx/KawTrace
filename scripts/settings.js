@@ -3,7 +3,7 @@
 // Default settings (used as fallback)
 const DEFAULT_SETTINGS = {
     // RPC Configuration
-    rpcUrl: 'https://evr-rpc-mainnet.ting.finance/rpc/',
+    rpcUrl: "/rpc",
     maxConcurrentRequests: 50,
     
     // Cache Durations (in milliseconds)
@@ -123,6 +123,23 @@ function mergeDeep(target, source) {
 // Utility to check if a value is an object
 function isObject(item) {
     return (item && typeof item === 'object' && !Array.isArray(item));
+}
+
+/** When served by evrmore-rpc-proxy, use same-origin /rpc (or configured path). */
+async function resolveProxyRpcUrl() {
+    try {
+        const pub = await fetch("/settings").then((r) => r.json());
+        if (!pub.endpoint) {
+            return "/rpc";
+        }
+        const configured = new URL(pub.endpoint, window.location.origin);
+        if (configured.origin === window.location.origin) {
+            return configured.pathname + configured.search;
+        }
+    } catch (e) {
+        /* explorer not served by proxy */
+    }
+    return null;
 }
 
 // Initialize the settings UI
@@ -427,6 +444,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize settings
     window.settings = await initSettings();
+
+    const proxyRpc = await resolveProxyRpcUrl();
+    if (proxyRpc) {
+        window.settings.rpcUrl = proxyRpc;
+        await saveSettings(window.settings);
+    }
     
     // Initialize UI
     initSettingsUI();
