@@ -8,6 +8,7 @@ It must to connected to an Evrmore rpc-proxy server of the type in:
 https://github.com/EvrmoreOrg/evrmore-rpc-proxy
 ```
 Edit the "rpcUrl" value near the top of the file "scripts/settings.js" in this repository to specify the location of the proxy server.
+Do the same for the "RPC_URL" value near the top of the file "scripts/utilities.js" in this repository.
 
 This explorer can be run in a browser from a file, on any web server, or converted to a single file and run off IPFS or on Github pages.
 
