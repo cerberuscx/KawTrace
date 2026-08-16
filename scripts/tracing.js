@@ -1,4 +1,4 @@
-// EVR Transaction Tracer - Intuitive Fund Flow Visualization
+// RVN Transaction Tracer - Intuitive Fund Flow Visualization
 
 // Main tracing state object
 const TracingState = {
@@ -672,7 +672,7 @@ function showTracePopover(traceId, isLoading = false) {
             <div class="trace-stats">
                 <span class="trace-stat">Transactions: <span class="tx-count">0</span></span>
                 <span class="trace-stat">Addresses: <span class="addr-count">0</span></span>
-                <span class="trace-stat">Total Value: <span class="total-value">0.00000000</span> EVR</span>
+                <span class="trace-stat">Total Value: <span class="total-value">0.00000000</span> RVN</span>
             </div>
             <div class="trace-progress">
                 <div class="progress-bar"></div>
@@ -990,7 +990,7 @@ function createTransactionCard(traceId, tx) {
         inputItem.className = 'tx-io-item';
         inputItem.innerHTML = `
             <a href="#" class="address-link" data-address="${addr}">${shortenAddress(addr)}</a>
-            <span class="tx-io-value">${value.toFixed(8)} EVR</span>
+            <span class="tx-io-value">${value.toFixed(8)} RVN</span>
         `;
         inputsList.appendChild(inputItem);
     });
@@ -1007,7 +1007,7 @@ function createTransactionCard(traceId, tx) {
         outputItem.className = 'tx-io-item';
         outputItem.innerHTML = `
             <a href="#" class="address-link" data-address="${addr}">${shortenAddress(addr)}</a>
-            <span class="tx-io-value">${value.toFixed(8)} EVR</span>
+            <span class="tx-io-value">${value.toFixed(8)} RVN</span>
         `;
         outputsList.appendChild(outputItem);
     });
@@ -1148,7 +1148,7 @@ function drawFlowConnections(traceId) {
             valueText.setAttribute('text-anchor', 'middle');
             valueText.setAttribute('font-size', '12');
             valueText.setAttribute('fill', '#333');
-            valueText.textContent = `${edge.value.toFixed(8)} EVR`;
+            valueText.textContent = `${edge.value.toFixed(8)} RVN`;
             
             // Add background to text for better readability
             const textBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -1270,9 +1270,9 @@ function renderListView(traceId, container) {
         
         row.innerHTML = `
             <td><a href="#" class="address-link" data-address="${addr.address}">${addr.address}</a></td>
-            <td class="amount-cell">${addr.totalReceived.toFixed(8)} EVR</td>
-            <td class="amount-cell">${addr.totalSent.toFixed(8)} EVR</td>
-            <td class="amount-cell ${addr.netFlow > 0 ? 'positive' : addr.netFlow < 0 ? 'negative' : ''}">${addr.netFlow.toFixed(8)} EVR</td>
+            <td class="amount-cell">${addr.totalReceived.toFixed(8)} RVN</td>
+            <td class="amount-cell">${addr.totalSent.toFixed(8)} RVN</td>
+            <td class="amount-cell ${addr.netFlow > 0 ? 'positive' : addr.netFlow < 0 ? 'negative' : ''}">${addr.netFlow.toFixed(8)} RVN</td>
             <td>
                 <button class="follow-btn ${isFollowed ? 'following' : ''}" data-address="${addr.address}">
                     ${isFollowed ? 'Unfollow' : 'Follow'}
@@ -1380,7 +1380,7 @@ function renderListView(traceId, container) {
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td><a href="#" class="address-link" data-address="${addr}">${addr}</a></td>
-                    <td class="amount-cell">${value.toFixed(8)} EVR</td>
+                    <td class="amount-cell">${value.toFixed(8)} RVN</td>
                 `;
                 inputsTbody.appendChild(row);
             });
@@ -1423,7 +1423,7 @@ function renderListView(traceId, container) {
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td><a href="#" class="address-link" data-address="${addr}">${addr}</a></td>
-                    <td class="amount-cell">${value.toFixed(8)} EVR</td>
+                    <td class="amount-cell">${value.toFixed(8)} RVN</td>
                 `;
                 outputsTbody.appendChild(row);
             });
@@ -1656,7 +1656,7 @@ function drawTransactionNode(ctx, x, y, width, height, tx) {
     
     // Draw value
     ctx.font = '10px Arial';
-    ctx.fillText(`${tx.outputValue.toFixed(8)} EVR`, x + (width / 2), y + (height / 2) + 8);
+    ctx.fillText(`${tx.outputValue.toFixed(8)} RVN`, x + (width / 2), y + (height / 2) + 8);
 }
 
 // Draw a connection line with arrow and value label
@@ -1692,7 +1692,7 @@ function drawConnection(ctx, x1, y1, x2, y2, value) {
     // Draw value label
     const labelX = controlX;
     const labelY = (y1 + y2) / 2 - 10;
-    const valueText = value.toFixed(8) + ' EVR';
+    const valueText = value.toFixed(8) + ' RVN';
     
     // Measure text width
     const textWidth = ctx.measureText(valueText).width;

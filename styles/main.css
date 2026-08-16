@@ -144,7 +144,7 @@
     }
     
  
-}/* Main CSS for EVR Tracky Boi blockchain explorer */
+}/* Main CSS for KawTrace blockchain explorer */
 
 /* ======= BASE VARIABLES ======= */
 :root {
@@ -350,6 +350,15 @@ select {
 .logo-link h1 {
     color: white;
     margin-bottom: 0;
+}
+
+.mempool-empty-state {
+    display: grid;
+    min-height: 180px;
+    margin: 0;
+    place-items: center;
+    color: var(--text-muted, #8b949e);
+    text-align: center;
 }
 
 .explorer-page-title {
@@ -1068,6 +1077,11 @@ tbody tr:hover {
 .status-pending {
     background-color: rgba(243, 156, 18, 0.2);
     color: #d35400;
+}
+
+.status-confirming {
+    background-color: rgba(52, 152, 219, 0.2);
+    color: #3498db;
 }
 
 [data-theme="dark"] .status-pending {

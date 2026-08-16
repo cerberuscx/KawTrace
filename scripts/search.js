@@ -1,4 +1,4 @@
-// EVR Tracky Boi - Search Functionality with URL Routing Support
+// KawTrace - Search Functionality with URL Routing Support
 
 // Search utility functions for the explorer
 const Search = {
@@ -63,15 +63,14 @@ const Search = {
             }
         }
         
-        // Check if it's an Evrmore address (starts with E, 34 chars)
-        if (/^[E][a-km-zA-HJ-NP-Z1-9]{33}$/.test(query)) {
-            // Valid address format
+        // Validate Base58Check and Ravencoin network-version bytes.
+        if (await window.KawTraceCore.validateRavencoinAddress(query)) {
             return { type: 'address', value: query };
         }
         
         // Check if it's an asset name - convert to uppercase for asset lookup
         try {
-            // Evrmore assets are uppercase only, so convert any input to uppercase
+            // Ravencoin assets are uppercase only, so convert any input to uppercase
             const upperCaseQuery = query.toUpperCase();
             console.log("Looking up asset:", upperCaseQuery);
             
@@ -167,7 +166,7 @@ const Search = {
     },
     
     // Validate search input
-    validateSearch: function(query) {
+    validateSearch: async function(query) {
         // Block height validation
         if (/^[0-9]+$/.test(query)) {
             return { isValid: true, type: 'block_height' };
@@ -179,7 +178,7 @@ const Search = {
         }
         
         // Address validation
-        if (/^[E][a-km-zA-HJ-NP-Z1-9]{33}$/.test(query)) {
+        if (await window.KawTraceCore.validateRavencoinAddress(query)) {
             return { isValid: true, type: 'address' };
         }
         

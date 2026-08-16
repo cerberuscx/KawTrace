@@ -1,4 +1,4 @@
-// EVR Tracky Boi - Main Application Script
+// KawTrace - Main Application Script
 
 // State management
 const appState = {
@@ -18,12 +18,16 @@ const appState = {
     lastViewedItems: [] // Track recently viewed items for potential background caching
 };
 
+let dashboardRefreshInProgress = false;
+const pendingTransitionCache = new Map();
+const MEMPOOL_HISTORY_KEY = 'mempool_history_v1';
+
 document.addEventListener('DOMContentLoaded', function() {
     
 
     initializeApp().catch(error => {
         console.error('Application initialization error:', error);
-        UI.showNotification('Connection Error', 'Failed to connect to the Evrmore network. Please check your connection and reload the page.', 'error');
+        UI.showNotification('Connection Error', 'Failed to connect to the Ravencoin network. Please check your connection and reload the page.', 'error');
     });
 
     document.getElementById('logo-link').addEventListener('click', function(e) {
@@ -38,6 +42,13 @@ document.addEventListener('DOMContentLoaded', function() {
 // Initialize function
 async function initializeApp() {
     setupEventListeners();
+
+    // Settings initialization is asynchronous. Apply it before the first RPC
+    // request so static hosting does not accidentally call a local /rpc path.
+    if (window.settingsManager) {
+        await window.settingsManager.applySettings();
+    }
+
     await updateNetworkStatus();
     
     // Initialize router before loading content
@@ -67,7 +78,7 @@ async function initializeApp() {
         document.getElementById('dashboard-view').innerHTML = `
             <div class="connection-error">
                 <h2>Connection Error</h2>
-                <p>Unable to connect to the Evrmore network.</p>
+                <p>Unable to connect to the Ravencoin network.</p>
                 <p>Please check your connection and try again.</p>
                 <button id="retry-connection">Retry Connection</button>
             </div>
@@ -81,21 +92,29 @@ async function initializeApp() {
                 }
             } catch (error) {
                 console.error('Retry connection error:', error);
-                UI.showNotification('Connection Error', 'Still unable to connect to the Evrmore network.', 'error');
+                UI.showNotification('Connection Error', 'Still unable to connect to the Ravencoin network.', 'error');
             }
         });
     }
     
-    setInterval(updateNetworkStatus, 30000); // Update every 30 seconds
+    setInterval(async () => {
+        await updateNetworkStatus();
+        if (document.getElementById('dashboard-view').classList.contains('active-view') && !dashboardRefreshInProgress) {
+            await loadDashboard({ silent: true });
+        }
+    }, 30000);
 
     setInterval(function() {
         // 1. Clean up stale requests (older than 30 seconds)
         if (window.utilities && window.utilities.currentRpcRequests) {
             const now = Date.now();
             const timeoutThreshold = 30000; // 30 seconds
-            window.utilities.currentRpcRequests = window.utilities.currentRpcRequests.filter(req => {
-                return !req.timestamp || (now - req.timestamp) < timeoutThreshold;
-            });
+            for (let index = window.utilities.currentRpcRequests.length - 1; index >= 0; index--) {
+                const request = window.utilities.currentRpcRequests[index];
+                if (request.timestamp && now - request.timestamp >= timeoutThreshold) {
+                    window.utilities.currentRpcRequests.splice(index, 1);
+                }
+            }
         }
         
         // 2. Update the UI
@@ -120,15 +139,6 @@ function setupEventListeners() {
             const view = link.getAttribute('data-view');
             navigateToView(view);
         });
-    });
-
-    // Search form
-    document.getElementById('search-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const searchTerm = document.getElementById('search-input').value.trim();
-        if (searchTerm) {
-            search(searchTerm);
-        }
     });
 
     // Clear cache button
@@ -284,8 +294,8 @@ async function search(term) {
         }
     }
     
-    // Check if it's an Evrmore address
-    if (/^[E][a-km-zA-HJ-NP-Z1-9]{33}$/.test(term)) {
+    // Check if it is a Ravencoin P2PKH or P2SH address.
+    if (await window.KawTraceCore.validateRavencoinAddress(term)) {
         navigateToAddressDetails(term);
         return;
     }
@@ -306,10 +316,10 @@ async function search(term) {
 }
 
 function chainToExplorerTitle(chain) {
-    if (chain === 'main') return 'Evrmore Mainnet Blockchain';
-    if (chain === 'test') return 'Evrmore Testnet Blockchain';
-    if (chain === 'regtest') return 'Evrmore Regtest Blockchain';
-    return 'Evrmore Blockchain';
+    if (chain === 'main') return 'Ravencoin Mainnet Blockchain';
+    if (chain === 'test') return 'Ravencoin Testnet Blockchain';
+    if (chain === 'regtest') return 'Ravencoin Regtest Blockchain';
+    return 'Ravencoin Blockchain';
 }
 
 // Update network status display
@@ -330,8 +340,8 @@ async function updateNetworkStatus() {
 
         appState.isConnected = true;
     } catch (error) {
-        if (titleEl) titleEl.textContent = 'Evrmore Blockchain';
-        document.title = 'Connor Evrmore Blockchain Explorer';
+        if (titleEl) titleEl.textContent = 'Ravencoin Blockchain';
+        document.title = 'KawTrace | Ravencoin Explorer';
 
         document.getElementById('connection-status').innerHTML = `<i class="fas fa-plug"></i> Disconnected`;
         document.getElementById('connection-status').style.color = 'var(--danger-color)';
@@ -341,10 +351,12 @@ async function updateNetworkStatus() {
 }
 
 // Dashboard
-async function loadDashboard() {
+async function loadDashboard({ silent = false } = {}) {
     // Only load if we're on the dashboard view
     if (appState.currentView !== 'dashboard') return;
     
+    if (dashboardRefreshInProgress) return;
+    dashboardRefreshInProgress = true;
     try {
         // Network stats
         const [difficulty, mempoolInfo, chainInfo, networkHashPs] = await Promise.all([
@@ -363,29 +375,42 @@ async function loadDashboard() {
         
         // Latest blocks
         const blocksData = await window.utilities.getLatestBlocksMetadata(null, 5);
-        displayLatestBlocks(blocksData.metadatas);
+        displayLatestBlocks(blocksData.metadatas, silent);
         
-        // Latest transactions
-        await loadLatestTransactions();
-        
-        // Mempool activity chart
-        createMempoolChart();
+        // Persist samples collected by this browser. Gaps remain gaps.
+        const mempoolHistory = await recordMempoolSample(mempoolInfo);
+        createMempoolChart(mempoolInfo, mempoolHistory);
+
+        // Recent user activity can require scanning through quiet blocks.
+        await loadLatestTransactions({ silent });
     } catch (error) {
         console.error('Error loading dashboard:', error);
         UI.showNotification('Error', 'Failed to load dashboard data.', 'error');
+    } finally {
+        dashboardRefreshInProgress = false;
     }
 }
 
 // Display latest blocks in dashboard
-function displayLatestBlocks(blocks) {
+function displayLatestBlocks(blocks, silent = false) {
     const tbody = document.getElementById('latest-blocks-body');
-    tbody.innerHTML = '';
-    
-    if (blocks.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="loading-row">No blocks found</td></tr>';
+    const signature = blocks.map(block => `${block.height}:${block.hash}:${block.tx_count}:${block.size}`).join('|');
+
+    if (silent && tbody.dataset.signature === signature) {
+        [...tbody.rows].forEach((row, index) => {
+            if (blocks[index]) row.cells[2].textContent = formatTime(blocks[index].time);
+        });
         return;
     }
     
+    if (blocks.length === 0) {
+        if (!silent || !tbody.rows.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="loading-row">No blocks found</td></tr>';
+        }
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
     blocks.forEach(block => {
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -395,7 +420,7 @@ function displayLatestBlocks(blocks) {
             <td>${block.tx_count ? block.tx_count.toLocaleString() : 'Loading...'}</td>
             <td>${block.size ? formatBytes(block.size) : 'Loading...'}</td>
         `;
-        tbody.appendChild(row);
+        fragment.appendChild(row);
         
         // If tx_count or size is missing, load asynchronously (but only if missing)
         if (!block.tx_count || !block.size) {
@@ -412,6 +437,8 @@ function displayLatestBlocks(blocks) {
             })();
         }
     });
+    tbody.replaceChildren(fragment);
+    tbody.dataset.signature = signature;
     
     // Add click event listeners to block links
     document.querySelectorAll('.block-link').forEach(link => {
@@ -424,65 +451,71 @@ function displayLatestBlocks(blocks) {
 }
 
 // Load latest transactions for dashboard
-async function loadLatestTransactions() {
+async function loadLatestTransactions({ silent = false } = {}) {
     const tbody = document.getElementById('latest-txs-body');
-    tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Loading transactions...</td></tr>';
+    if (!silent && !tbody.dataset.signature) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Loading transactions...</td></tr>';
+    }
     
     try {
-        // First get latest block
-        const latestBlockHash = await window.utilities.getBestBlockHash();
-        const latestBlock = await window.utilities.getBlock(latestBlockHash);
+        const transactions = await window.utilities.getRecentTransactions(5, 50);
         
-        // Get a sample of transactions from the latest block
-        // Handle both cases where tx can be an array of strings (txids) or an array of transaction objects
-        const txids = latestBlock.tx.slice(0, 5).map(tx => typeof tx === 'string' ? tx : tx.txid);
-        const transactions = await Promise.all(txids.map(txid => window.utilities.getTransactionDetails(txid)));
-        
-        tbody.innerHTML = '';
-        
-        transactions.forEach(txData => {
+        const rows = transactions.map(txData => ({ ...txData, status: 'confirmed' }));
+        const confirmedTxids = new Set(rows.map(row => row.tx.txid));
+        confirmedTxids.forEach(txid => pendingTransitionCache.delete(txid));
+        const mempool = await window.utilities.getRawMempool(true);
+        const mempoolTxids = Object.keys(mempool)
+            .sort((a, b) => (mempool[b].time || 0) - (mempool[a].time || 0))
+            .slice(0, 5);
+
+        for (const txid of mempoolTxids) {
+            const details = await window.utilities.getTransactionDetails(txid);
+            const pendingRow = { tx: details.tx, time: mempool[txid].time, status: 'pending', seenAt: Date.now() };
+            pendingTransitionCache.set(txid, pendingRow);
+            rows.push(pendingRow);
+        }
+
+        // A node can remove a transaction from its mempool immediately before
+        // the confirming block becomes visible through cached chain calls.
+        // Retain it briefly as Confirming so it does not disappear between states.
+        const now = Date.now();
+        for (const [txid, pendingRow] of pendingTransitionCache) {
+            if (confirmedTxids.has(txid) || mempool[txid]) continue;
+            if (now - pendingRow.seenAt > 120000) {
+                pendingTransitionCache.delete(txid);
+                continue;
+            }
+            rows.push({ ...pendingRow, status: 'confirming' });
+        }
+
+        rows.sort((a, b) => (b.time || 0) - (a.time || 0));
+
+        const signature = rows.map(row => `${row.tx.txid}:${row.status}:${row.time}`).join('|');
+        if (silent && tbody.dataset.signature === signature) return;
+
+        const fragment = document.createDocumentFragment();
+        if (rows.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td colspan="4" class="loading-row">No recent non-coinbase transactions found</td>';
+            fragment.appendChild(row);
+        }
+        rows.forEach(txData => {
             const { tx } = txData;
             
             // Calculate total value
-            let totalValue = 0;
-            tx.vout.forEach(vout => {
-                if (vout.value) totalValue += vout.value;
-            });
+            const totalValue = window.KawTraceCore.transactionOutputTotal(tx);
             
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><a href="#" data-txid="${tx.txid}" class="tx-link">${formatHash(tx.txid)}</a></td>
-                <td>${formatTime(tx.time || Date.now() / 1000)}</td>
-                <td>${totalValue.toFixed(8)} EVR</td>
-                <td><span class="status-badge status-confirmed">Confirmed</span></td>
+                <td>${formatTime(txData.time)}</td>
+                <td>${totalValue.toFixed(8)} RVN</td>
+                <td><span class="status-badge status-${txData.status}">${txData.status === 'pending' ? 'Pending' : txData.status === 'confirming' ? 'Confirming' : 'Confirmed'}</span></td>
             `;
-            tbody.appendChild(row);
+            fragment.appendChild(row);
         });
-        
-        // Add mempool transactions if available
-        const mempool = await window.utilities.getRawMempool(true);
-        const mempoolTxids = Object.keys(mempool).slice(0, 5);
-        
-        if (mempoolTxids.length > 0) {
-            for (const txid of mempoolTxids) {
-                const tx = await window.utilities.getTransactionDetails(txid);
-                
-                // Calculate total value
-                let totalValue = 0;
-                tx.tx.vout.forEach(vout => {
-                    if (vout.value) totalValue += vout.value;
-                });
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td><a href="#" data-txid="${tx.tx.txid}" class="tx-link">${formatHash(tx.tx.txid)}</a></td>
-                    <td>${formatTime(mempool[txid].time)}</td>
-                    <td>${totalValue.toFixed(8)} EVR</td>
-                    <td><span class="status-badge status-pending">Pending</span></td>
-                `;
-                tbody.appendChild(row);
-            }
-        }
+        tbody.replaceChildren(fragment);
+        tbody.dataset.signature = signature;
         
         // Add click event listeners to transaction links
         document.querySelectorAll('.tx-link').forEach(link => {
@@ -494,25 +527,88 @@ async function loadLatestTransactions() {
         });
     } catch (error) {
         console.error('Error loading latest transactions:', error);
-        tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Error loading transactions</td></tr>';
+        if (!silent || !tbody.rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Error loading transactions</td></tr>';
+        }
     }
 }
 
-// Create mempool chart
-function createMempoolChart() {
-    const ctx = document.getElementById('mempool-chart').getContext('2d');
-    
-    // Placeholder data - in a real application, you'd query historical mempool data
-    const labels = Array.from({ length: 24 }, (_, i) => `${(23 - i)} hr ago`).reverse();
+async function recordMempoolSample(mempoolInfo) {
+    const cached = await window.utilities.loadFromIndexedDB('misc', MEMPOOL_HISTORY_KEY);
+    const samples = Array.isArray(cached?.samples) ? cached.samples : [];
+    const sample = {
+        timestamp: Date.now(),
+        count: Number(mempoolInfo.size) || 0,
+        bytes: Number(mempoolInfo.bytes) || 0,
+        fees: Number.isFinite(mempoolInfo.total_fee) ? mempoolInfo.total_fee : null
+    };
+    if (samples.length && sample.timestamp - samples[samples.length - 1].timestamp < 10000) {
+        samples[samples.length - 1] = sample;
+    } else {
+        samples.push(sample);
+    }
+    const cutoff = sample.timestamp - 86400000;
+    const retained = samples.filter(entry => entry.timestamp >= cutoff).slice(-2880);
+    await window.utilities.saveToIndexedDB('misc', {
+        id: MEMPOOL_HISTORY_KEY,
+        samples: retained,
+        timestamp: sample.timestamp
+    });
+    return retained;
+}
+
+// Create or update the locally collected mempool history chart.
+function createMempoolChart(mempoolInfo, history = []) {
+    const canvas = document.getElementById('mempool-chart');
+    const container = canvas.parentElement;
+    let emptyState = container.querySelector('.mempool-empty-state');
+
+    if (history.length < 2 && !mempoolInfo.size) {
+        if (window.mempoolChart) {
+            window.mempoolChart.destroy();
+            window.mempoolChart = null;
+        }
+        canvas.hidden = true;
+        if (!emptyState) {
+            emptyState = document.createElement('p');
+            emptyState.className = 'mempool-empty-state';
+            emptyState.setAttribute('role', 'status');
+            container.appendChild(emptyState);
+        }
+        emptyState.textContent = 'The mempool is currently empty. History will appear as samples are collected.';
+        document.getElementById('mempool-pending').textContent = '0';
+        document.getElementById('mempool-fees').textContent = Number.isFinite(mempoolInfo.total_fee)
+            ? `${mempoolInfo.total_fee.toFixed(8)} RVN`
+            : 'Unavailable';
+        return;
+    }
+
+    canvas.hidden = false;
+    if (emptyState) emptyState.remove();
+
+    if (window.mempoolChart) {
+        window.mempoolChart.data.labels = history.map(sample => new Date(sample.timestamp).toLocaleTimeString());
+        window.mempoolChart.data.datasets[0].data = history.map(sample => sample.count);
+        window.mempoolChart.update('none');
+        document.getElementById('mempool-pending').textContent = mempoolInfo.size.toLocaleString();
+        document.getElementById('mempool-fees').textContent = Number.isFinite(mempoolInfo.total_fee)
+            ? `${mempoolInfo.total_fee.toFixed(8)} RVN`
+            : 'Unavailable';
+        return;
+    }
+    const ctx = canvas.getContext('2d');
+
+    const labels = history.map(sample => new Date(sample.timestamp).toLocaleTimeString());
     const data = {
         labels: labels,
         datasets: [{
             label: 'Mempool Size (Tx Count)',
-            data: Array.from({ length: 24 }, () => Math.floor(Math.random() * 100) + 50),
+            data: history.map(sample => sample.count),
             borderColor: 'rgba(52, 152, 219, 1)',
             backgroundColor: 'rgba(52, 152, 219, 0.1)',
             fill: true,
-            tension: 0.4
+            tension: 0.25,
+            pointRadius: history.length < 3 ? 3 : 0
         }]
     };
     
@@ -547,16 +643,13 @@ function createMempoolChart() {
         }
     };
     
-    // Destroy existing chart if it exists
-    if (window.mempoolChart) {
-        window.mempoolChart.destroy();
-    }
-    
     window.mempoolChart = new Chart(ctx, config);
     
     // Update mempool stats
-    document.getElementById('mempool-pending').textContent = data.datasets[0].data[data.datasets[0].data.length - 1].toLocaleString();
-    document.getElementById('mempool-fees').textContent = `${(Math.random() * 0.1).toFixed(8)} EVR`;
+    document.getElementById('mempool-pending').textContent = (mempoolInfo.size || 0).toLocaleString();
+    document.getElementById('mempool-fees').textContent = Number.isFinite(mempoolInfo.total_fee)
+        ? `${mempoolInfo.total_fee.toFixed(8)} RVN`
+        : 'Unavailable';
 }
 
 // Navigate to block details
@@ -721,7 +814,10 @@ async function navigateToAddressDetails(address, updateHash = true) {
             window.router.navigateToAddress(address);
         }
         
-        // Reset pagination and store current address
+        // Reset address-specific UI state when navigating to a new address.
+        if (appState.currentAddress !== address) {
+            addressDetailsView.removeAttribute('data-txs-loaded');
+        }
         appState.addressPagination.page = 1;
         appState.currentAddress = address;
         

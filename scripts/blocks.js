@@ -1,4 +1,4 @@
-// EVR Tracky Boi - Blocks Explorer Functionality
+// KawTrace - Blocks Explorer Functionality
 
 // Load blocks view
 async function loadBlocksView() {
@@ -307,7 +307,7 @@ async function displayBlockTransactions(block) {
                     <td><span class="tx-type tx-type-${txType.toLowerCase()}">${txType}</span></td>
                     <td>${transaction.vin.length}</td>
                     <td>${transaction.vout.length}</td>
-                    <td>${totalValue.toFixed(8)} EVR</td>
+                    <td>${totalValue.toFixed(8)} RVN</td>
                 `;
                 rows.push(row);
             }

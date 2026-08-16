@@ -1,4 +1,4 @@
-// EVR Tracky Boi - Transactions Explorer Functionality
+// KawTrace - Transactions Explorer Functionality
 
 // Load transactions view
 function loadTransactionsView() {
@@ -45,45 +45,7 @@ async function loadRecentTransactions() {
     tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Loading transactions...</td></tr>';
     
     try {
-        // Get current blockchain height
-        const currentHeight = await window.utilities.getBlockCount();
-        
-        // Number of recent blocks to scan
-        const BLOCKS_TO_SCAN = 2;
-        const transactionsToShow = [];
-        
-        // Scan recent blocks for transactions
-        for (let height = currentHeight; height > currentHeight - BLOCKS_TO_SCAN && height >= 0; height--) {
-            try {
-                const blockHash = await window.utilities.getBlockHash(height);
-                const block = await window.utilities.getBlock(blockHash);
-                
-                // Take a subset of transactions from each block
-                const blockTransactions = block.tx.slice(0, 10);
-                
-                // Get transaction details
-                for (const tx of blockTransactions) {
-                    if (transactionsToShow.length >= 20) break; // Limit to 20 transactions
-                    
-                    try {
-                        // Handle both cases where tx can be a string (txid) or a transaction object
-                        const txid = typeof tx === 'string' ? tx : tx.txid;
-                        const txDetails = await window.utilities.getTransactionDetails(txid);
-                        transactionsToShow.push({
-                            tx: txDetails.tx,
-                            blockheight: height,
-                            confirmations: txDetails.confirmations
-                        });
-                    } catch (txError) {
-                        console.error(`Error processing transaction in block ${height}:`, txError);
-                    }
-                }
-            } catch (blockError) {
-                console.error(`Error processing block at height ${height}:`, blockError);
-            }
-            
-            if (transactionsToShow.length >= 20) break;
-        }
+        const transactionsToShow = await window.utilities.getRecentTransactions(20, 100);
         
         // Clear table and display transactions
         tbody.innerHTML = '';
@@ -100,7 +62,6 @@ async function loadRecentTransactions() {
             const confirmations = txData.confirmations;
             
             // Calculate total input/output value
-            let totalInputValue = 0;
             let totalOutputValue = 0;
             let containsAssets = false;
             
@@ -125,7 +86,7 @@ async function loadRecentTransactions() {
                 <td>${window.app.formatTime(tx.time)}</td>
                 <td>${tx.vin.length}</td>
                 <td>${tx.vout.length}</td>
-                <td>${totalOutputValue.toFixed(8)} EVR ${containsAssets ? '<i class="fas fa-cube" title="Contains Assets"></i>' : ''}</td>
+                <td>${totalOutputValue.toFixed(8)} RVN ${containsAssets ? '<i class="fas fa-cube" title="Contains Assets"></i>' : ''}</td>
                 <td><span class="status-badge status-confirmed">${confirmations} Confirmations</span></td>
             `;
             tbody.appendChild(row);
@@ -289,7 +250,7 @@ async function displayTransactionDetails(txid) {
         // Calculate fee (for simplicity, we'll just show "N/A" as calculating the fee requires looking up input values)
         txFeeEl.textContent = 'Calculating...';
         calculateTxFee(tx).then(fee => {
-            txFeeEl.textContent = fee !== null ? `${fee.toFixed(8)} EVR` : 'N/A';
+            txFeeEl.textContent = fee !== null ? `${fee.toFixed(8)} RVN` : 'N/A';
         });
         
         txInputCountEl.textContent = tx.vin.length;
@@ -370,7 +331,7 @@ async function displayTxInputs(tx) {
                     
                     // Get amount from previous output
                     if (prevOutput.value) {
-                        amountHtml = `<span class="io-amount">${prevOutput.value.toFixed(8)} EVR</span>`;
+                        amountHtml = `<span class="io-amount">${prevOutput.value.toFixed(8)} RVN</span>`;
                     }
                     
                     // Check for assets in previous output
@@ -480,7 +441,7 @@ function displayTxOutputs(tx) {
                 </div>
                 <div class="io-value">
                     <span class="label">Value:</span>
-                    <span class="io-amount">${vout.value ? vout.value.toFixed(8) + ' EVR' : 'No EVR'}</span>
+                    <span class="io-amount">${vout.value ? vout.value.toFixed(8) + ' RVN' : 'No RVN'}</span>
                     ${assetHtml}
                 </div>
                 <div class="io-status">

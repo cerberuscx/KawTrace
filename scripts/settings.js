@@ -1,18 +1,19 @@
-// settings.js - Settings Manager for EVR Tracky Boi
+// settings.js - Settings Manager for KawTrace
 
 // Default settings (used as fallback)
 const DEFAULT_SETTINGS = {
     // RPC Configuration
-    rpcUrl: "/rpc",
-    maxConcurrentRequests: 50,
+    rpcPreset: "ting-mainnet",
+    rpcUrl: "https://rvn-rpc-mainnet.ting.finance/rpc",
+    maxConcurrentRequests: 4,
     
     // Cache Durations (in milliseconds)
     cacheDurations: {
-        addressData: 3600000,     // 1 hour
-        blockCount: 60000,        // 1 minute
-        mempool: 30000,           // 30 seconds
-        utxo: 1800000,            // 30 minutes
-        txHistory: 3600000,       // 1 hour
+        addressData: 60000,       // 1 minute
+        blockCount: 15000,        // 15 seconds
+        mempool: 15000,           // 15 seconds
+        utxo: 60000,              // 1 minute
+        txHistory: 60000,         // 1 minute
         assetData: 86400000,      // 24 hours
         indefinite: 31536000000   // ~1 year (for immutable data)
     },
@@ -25,17 +26,29 @@ const DEFAULT_SETTINGS = {
 };
 
 // Settings storage key
-const SETTINGS_STORAGE_KEY = 'evrTrackyBoi_settings';
+const SETTINGS_STORAGE_KEY = 'kawtrace_settings_v2';
+const LEGACY_SETTINGS_STORAGE_KEY = 'kawtrace_settings_v1';
+const RPC_PRESETS = {
+    'ting-mainnet': 'https://rvn-rpc-mainnet.ting.finance/rpc',
+    'ting-testnet': 'https://rvn-rpc-testnet.ting.finance/rpc',
+    'same-origin': '/rpc',
+    'custom': ''
+};
 
 // Initialize or get settings from storage
 async function initSettings() {
     try {
         // Try to load settings from IndexedDB
-        const storedSettings = await window.utilities.loadFromIndexedDB('misc', SETTINGS_STORAGE_KEY);
+        const storedSettings = await window.utilities.loadFromIndexedDB('misc', SETTINGS_STORAGE_KEY)
+            || await loadLegacySettings();
         
         if (storedSettings && storedSettings.data) {
             // Found stored settings - merge with defaults to ensure all properties exist
-            return mergeDeep(DEFAULT_SETTINGS, storedSettings.data);
+            const migrated = mergeDeep(DEFAULT_SETTINGS, storedSettings.data);
+            // Unsafe inherited defaults are not carried into the new version.
+            if (migrated.maxConcurrentRequests === 50) migrated.maxConcurrentRequests = 4;
+            await saveSettings(migrated);
+            return migrated;
         }
     } catch (error) {
         console.warn('Failed to load settings from IndexedDB:', error);
@@ -44,6 +57,31 @@ async function initSettings() {
     // No stored settings found, use defaults and store them
     await saveSettings(DEFAULT_SETTINGS);
     return DEFAULT_SETTINGS;
+}
+
+function loadLegacySettings() {
+    return new Promise((resolve) => {
+        const request = indexedDB.open('BlockExplorerDB');
+        request.onerror = () => resolve(null);
+        request.onsuccess = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains('misc')) {
+                db.close();
+                resolve(null);
+                return;
+            }
+            const transaction = db.transaction('misc', 'readonly');
+            const getRequest = transaction.objectStore('misc').get(LEGACY_SETTINGS_STORAGE_KEY);
+            getRequest.onsuccess = () => {
+                db.close();
+                resolve(getRequest.result || null);
+            };
+            getRequest.onerror = () => {
+                db.close();
+                resolve(null);
+            };
+        };
+    });
 }
 
 // Save settings to storage
@@ -125,7 +163,7 @@ function isObject(item) {
     return (item && typeof item === 'object' && !Array.isArray(item));
 }
 
-/** When served by evrmore-rpc-proxy, use same-origin /rpc (or configured path). */
+/** When served beside a compatible Ravencoin RPC proxy, use same-origin /rpc. */
 async function resolveProxyRpcUrl() {
     try {
         const pub = await fetch("/settings").then((r) => r.json());
@@ -254,9 +292,21 @@ function generateSettingsForm(settings) {
             <div class="settings-section">
                 <h4>RPC Configuration</h4>
                 <div class="setting-group">
+                    <label for="rpc-preset">Endpoint preset:</label>
+                    <select id="rpc-preset">
+                        <option value="ting-mainnet" ${settings.rpcPreset === 'ting-mainnet' ? 'selected' : ''}>Ting Mainnet (public)</option>
+                        <option value="ting-testnet" ${settings.rpcPreset === 'ting-testnet' ? 'selected' : ''}>Ting Testnet (public)</option>
+                        <option value="same-origin" ${settings.rpcPreset === 'same-origin' ? 'selected' : ''}>Same-origin /rpc</option>
+                        <option value="custom" ${settings.rpcPreset === 'custom' ? 'selected' : ''}>Custom proxy</option>
+                    </select>
+                </div>
+                <div class="setting-group">
                     <label for="rpc-url">RPC URL:</label>
                     <input type="text" id="rpc-url" value="${settings.rpcUrl}">
                 </div>
+                <p class="settings-warning">Public endpoints can observe queries and may be rate-limited or unavailable. Never enter node credentials or expose Ravencoin Core RPC directly.</p>
+                <button type="button" id="settings-test-rpc">Test Connection</button>
+                <div id="settings-test-result" role="status" aria-live="polite"></div>
                 <div class="setting-group">
                     <label for="max-concurrent">Max Concurrent Requests:</label>
                     <input type="number" id="max-concurrent" value="${settings.maxConcurrentRequests}" min="1" max="100">
@@ -312,6 +362,31 @@ function generateSettingsForm(settings) {
 
 // Add event listeners to the settings form
 function addSettingsFormListeners(popover) {
+    const presetSelect = popover.querySelector('#rpc-preset');
+    const rpcInput = popover.querySelector('#rpc-url');
+    if (presetSelect && rpcInput) {
+        presetSelect.addEventListener('change', () => {
+            const presetUrl = RPC_PRESETS[presetSelect.value];
+            if (presetUrl) rpcInput.value = presetUrl;
+            rpcInput.readOnly = presetSelect.value !== 'custom';
+        });
+        rpcInput.readOnly = presetSelect.value !== 'custom';
+    }
+
+    const testButton = popover.querySelector('#settings-test-rpc');
+    if (testButton) {
+        testButton.addEventListener('click', async () => {
+            const result = popover.querySelector('#settings-test-result');
+            result.textContent = 'Testing...';
+            try {
+                const chain = await testRpcEndpoint(rpcInput.value.trim());
+                result.textContent = `Connected to ${chain.chain || 'unknown chain'} at block ${Number(chain.blocks).toLocaleString()}.`;
+            } catch (error) {
+                result.textContent = `Connection failed: ${error.message}`;
+            }
+        });
+    }
+
     // Close button
     const closeBtn = popover.querySelector('.settings-close');
     if (closeBtn) {
@@ -372,7 +447,8 @@ async function saveSettingsFromForm() {
     const settings = await getSettings();
     
     // RPC Configuration
-    settings.rpcUrl = document.getElementById('rpc-url').value;
+    settings.rpcPreset = document.getElementById('rpc-preset').value;
+    settings.rpcUrl = document.getElementById('rpc-url').value.trim();
     settings.maxConcurrentRequests = parseInt(document.getElementById('max-concurrent').value);
     
     // Cache Durations
@@ -393,6 +469,21 @@ async function saveSettingsFromForm() {
     window.settings = settings;
     
     return settings;
+}
+
+async function testRpcEndpoint(url) {
+    if (!url) throw new Error('RPC URL is required');
+    const parsed = new URL(url, window.location.origin);
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only HTTP and HTTPS endpoints are supported');
+    const response = await fetch(parsed.href, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '1.0', id: 'kawtrace-test', method: 'getblockchaininfo', params: [] })
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (payload.error) throw new Error(payload.error.message || 'RPC error');
+    return payload.result;
 }
 
 // Apply settings to the application

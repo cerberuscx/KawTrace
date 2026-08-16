@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connor Evrmore Blockchain Explorer</title>
+    <title>KawTrace | Ravencoin Explorer</title>
     <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="icon" href="img/logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <link rel="icon" href="img/logo.png" type="image/png">
     
 
 </head>
@@ -17,10 +17,10 @@
                 <div class="header-content">
                     <div class="logo-container">
                         <a href="#" id="logo-link" class="logo-link">
-                            <img src="img/logo.svg" alt="Evrmore logo" class="logo">
+                            <img src="img/logo.png" alt="Ravencoin logo" class="logo">
                         </a>
                     </div>
-                    <h1 id="explorer-page-title" class="explorer-page-title">Evrmore Blockchain</h1>
+                    <h1 id="explorer-page-title" class="explorer-page-title">Ravencoin Blockchain</h1>
                     <div class="network-status">
                         <span id="connection-status"><i class="fas fa-plug"></i> Connected</span>
                         <span id="block-height"><i class="fas fa-cube"></i> Loading...</span>
@@ -115,7 +115,7 @@
                                     <tr>
                                         <th>Transaction ID</th>
                                         <th>Time</th>
-                                        <th>Amount</th>
+                                        <th>Output Total</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
@@ -165,13 +165,13 @@
         <footer class="footer">
             <div class="footer-content">
                 <div class="footer-info">
-                    <p>Evrmore Blockchain Explorer: originally by @jc0839</p>
+                    <p>KawTrace, based on work by JohnConnorNPC and EvrmoreOrg</p>
                 </div>
                 <div class="footer-links">
                     <a href="#" id="clear-cache">Clear Cache</a>
-                    <a href="https://evrmorecoin.org" target="_blank">Evrmore</a>
-                    <a href="https://github.com/EvrmoreOrg/evr-connor-explorer/" target="_blank">GitHub</a>
-                    <a href="https://EvrmoreOrg.github.io/evr-connor-explorer" target="_blank">Live Demo</a>
+                    <a href="https://ravencoin.org" target="_blank" rel="noopener noreferrer">Ravencoin</a>
+                    <a href="https://github.com/JohnConnorNPC/EVR-TRACKY-BOI" target="_blank" rel="noopener noreferrer">Original</a>
+                    <a href="https://github.com/EvrmoreOrg/evr-connor-explorer" target="_blank" rel="noopener noreferrer">Upstream</a>
                 </div>
                 <div class="rpc-status">
                     <span id="active-requests">Active RPC Requests: <span id="rpc-count">0</span></span>
@@ -234,7 +234,7 @@
                             <th>Time</th>
                             <th>Inputs</th>
                             <th>Outputs</th>
-                            <th>Amount (EVR)</th>
+                            <th>Output Total (RVN)</th>
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -242,7 +242,7 @@
                 </table>
             </div>
             <div class="mempool-section">
-                <h3>Mempool Transactions</h3>
+                <h3>RPC Node Mempool Transactions</h3>
                 <div class="table-container">
                     <table id="mempool-table">
                         <thead>
@@ -250,8 +250,8 @@
                                 <th>Transaction ID</th>
                                 <th>Received Time</th>
                                 <th>Size (Bytes)</th>
-                                <th>Fee (EVR)</th>
-                                <th>Fee Rate (EVR/kB)</th>
+                                <th>Fee (RVN)</th>
+                                <th>Fee Rate (RVN/kB)</th>
                             </tr>
                         </thead>
                         <tbody id="mempool-table-body"></tbody>
@@ -318,7 +318,7 @@
                             <th>Type</th>
                             <th>Inputs</th>
                             <th>Outputs</th>
-                            <th>Amount (EVR)</th>
+                                    <th>Output Total (RVN)</th>
                         </tr>
                     </thead>
                     <tbody id="block-transactions-body"></tbody>
@@ -439,7 +439,7 @@
                                 <th>Block</th>
                                 <th>Time</th>
                                 <th>Type</th>
-                                <th>Amount (EVR)</th>
+                                <th>Amount (RVN)</th>
                                 <th>Balance Change</th>
                             </tr>
                         </thead>
@@ -477,7 +477,7 @@
                             <th>Total Supply</th>
                             <th>Units</th>
                             <th>Reissuable</th>
-                            <th>Issuer</th>
+                            <th>IPFS</th>
                         </tr>
                     </thead>
                     <tbody id="assets-table-body"></tbody>
@@ -524,12 +524,20 @@
                     <span class="label">IPFS Hash:</span>
                     <span class="value" id="asset-detail-ipfs"></span>
                 </div>
+                <div class="summary-item" id="asset-restricted-container" hidden>
+                    <span class="label">Verifier:</span>
+                    <span class="value" id="asset-detail-verifier"></span>
+                </div>
+                <div class="summary-item" id="asset-global-restriction-container" hidden>
+                    <span class="label">Globally Frozen:</span>
+                    <span class="value" id="asset-detail-global-restriction"></span>
+                </div>
  
             </div>
             
             <div class="asset-holders">
                 <h3>Asset Holders</h3>
-                <p class="sort-instruction">Click on column headers to sort</p>
+                <p class="sort-instruction">Click column headers to sort the current page.</p>
                 <div class="table-container">
                     <table id="asset-holders-table">
                         <thead>
@@ -553,10 +561,11 @@
     
 
     <!-- JavaScript libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="vendor/moment/moment.min.js"></script>
+    <script src="vendor/chart/chart.min.js"></script>
     
     <!-- Application scripts - order matters for dependencies -->
+    <script src="scripts/core.js"></script>
     <script src="scripts/utilities.js"></script>
     <script src="scripts/ui.js"></script>
     <!-- Load modules before app.js -->

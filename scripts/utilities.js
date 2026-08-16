@@ -11,8 +11,8 @@ let ASSET_DATA_CACHE_DURATION = 86400000; // 24 hours for asset data
 let INDEFINITE_CACHE = 31536000000; // ~1 year (for immutable data)
 
 // RPC Configuration
-let RPC_URL = "/rpc";
-let MAX_CONCURRENT_REQUESTS = 50;
+let RPC_URL = "https://rvn-rpc-mainnet.ting.finance/rpc";
+let MAX_CONCURRENT_REQUESTS = 4;
 
 // Function to update cache durations from settings
 function setCacheDurations(durations) {
@@ -39,7 +39,6 @@ let requestCounter = 0;
 // RPC Queue for managing concurrent requests
 const rpcQueue = [];
 let activeRequests = 0;
-const maxConcurrent = 50; // Adjust based on server limits
 
 // Cache hit counter (for debugging)
 let cacheHits = 0;
@@ -67,7 +66,7 @@ function setMaxConcurrentRequests(max) {
 function openDatabase() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open('BlockExplorerDB', 2); // Increased version for schema update
+    const request = indexedDB.open('KawTraceDB', 1);
     
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
@@ -221,7 +220,6 @@ async function deleteFromIndexedDB(storeName, key) {
 // Modified queue RPC function to use dynamic max concurrent
 async function queueRpc(method, params = []) {
   return new Promise((resolve, reject) => {
-    console.warn(method);
     rpcQueue.push({ method, params, resolve, reject });
     processQueue();
   });
@@ -274,7 +272,10 @@ async function callRpc(method, params = []) {
     // Block-related mutable data (changes with new blocks)
     case 'getblockcount':
     case 'getbestblockhash':
-    case 'getdifficulty':
+      cacheDuration = BLOCK_COUNT_CACHE_DURATION;
+      break;
+
+    case 'getblockchaininfo':
       cacheDuration = BLOCK_COUNT_CACHE_DURATION;
       break;
 
@@ -323,7 +324,6 @@ async function callRpc(method, params = []) {
     case 'getchaintips':
     case 'getchaintxstats':
     case 'getnetworkhashps':
-    case 'getblockchaininfo':
       cacheDuration = 300000; // 5 minutes
       break;
 
@@ -386,7 +386,8 @@ async function callRpc(method, params = []) {
     throw error;
   } finally {
     // Remove this request from tracking
-    currentRpcRequests = currentRpcRequests.filter(req => req.id !== requestId);
+    const requestIndex = currentRpcRequests.findIndex(req => req.id === requestId);
+    if (requestIndex !== -1) currentRpcRequests.splice(requestIndex, 1);
     if (window.ui && typeof window.ui.updateRpcStatus === 'function') window.ui.updateRpcStatus();
   }
 }
@@ -460,195 +461,32 @@ async function getAddressMempool(address) {
 
 async function getAddressTxids(address, page = 1) {
   const perPage = 10;
-  const initialBlocksToScan = 10;
-  const maxBlocksToScan = 10000; // Increased from 1000 to allow finding older transactions
-  const maxRequestsPerPage = 8;  // Increased from 5 to allow more parallel requests
-  
-  // Normalize address parameter
   const addressParam = typeof address === 'string' 
     ? { addresses: [address] } 
     : (address.addresses ? address : { addresses: [address] });
-  
-  // For simplicity, extract single address if we have one
   const singleAddress = addressParam.addresses && addressParam.addresses.length === 1 
     ? addressParam.addresses[0] 
     : null;
-  
-  // First try comprehensive cache for fast response
+  const cacheKey = `complete_${JSON.stringify(addressParam)}`;
+  let cached = await loadFromIndexedDB('addressTxids', cacheKey);
+  let allTxids;
+  if (cached && Date.now() - cached.timestamp < TX_HISTORY_CACHE_DURATION) {
+    allTxids = cached.txids;
+  } else {
+    allTxids = await queueRpc('getaddresstxids', [addressParam]);
+    await saveToIndexedDB('addressTxids', { cacheKey, txids: allTxids, timestamp: Date.now() });
+  }
+
+  // addressindex returns oldest first.
+  const pagination = window.KawTraceCore.paginateNewestTxids(allTxids, page, perPage);
+  const { pageTxids, hasMore, total, allTxids: newestFirst } = pagination;
   if (singleAddress) {
-    // Check if we already have a page-specific cache for this request
-    const pageSpecificCacheKey = `${singleAddress}_page_${page}`;
-    const pageCache = await loadFromIndexedDB('addressTxids', pageSpecificCacheKey);
-    
-    if (pageCache && pageCache.txids) {
-      console.log(`Cache hit for address ${singleAddress} page ${page}`);
-      return { 
-        pageTxids: pageCache.txids.slice(0, perPage), 
-        hasMore: pageCache.txids.length > perPage || pageCache.hasMore 
-      };
-    }
-    
-    // Check comprehensive address data cache
-    const fullAddressData = await loadFromIndexedDB('addressFullData', singleAddress);
-    if (fullAddressData && fullAddressData.allTxids && 
-        (Date.now() - fullAddressData.timestamp < ADDRESS_DATA_CACHE_DURATION)) {
-      
-      console.log(`Full data cache hit for address ${singleAddress}`);
-      // Calculate pagination from the complete list
-      const startIdx = (page - 1) * perPage;
-      const endIdx = startIdx + perPage;
-      const pageTxids = fullAddressData.allTxids.slice(startIdx, endIdx);
-      const hasMore = fullAddressData.allTxids.length > endIdx;
-      
-      // Cache this page result for faster access next time
-      await saveToIndexedDB('addressTxids', { 
-        cacheKey: pageSpecificCacheKey, 
-        txids: pageTxids,
-        hasMore,
-        timestamp: Date.now()
-      });
-      
-      return { pageTxids, hasMore };
-    }
+    const fullData = await loadFromIndexedDB('addressFullData', singleAddress) || { address: singleAddress };
+    fullData.allTxids = newestFirst;
+    fullData.txHistoryTimestamp = Date.now();
+    await saveToIndexedDB('addressFullData', fullData);
   }
-  
-  // If not in cache, proceed with exponential search pattern
-  console.log(`Cache miss for address ${singleAddress}, performing exponential search`);
-  const currentHeight = await getBlockCount();
-  
-  // Variables for exponential search pattern
-  const allTxids = [];
-  let requestCount = 0;
-  let heightsToSearch = [];
-  let scanHeightStart = currentHeight;
-  let batchSize = initialBlocksToScan;
-  let foundTxids = true; // Start true to enter the loop
-  
-  // Generate the heights to search using exponential increasing batch sizes
-  // Example: [0-10], [11-30], [31-70], [71-150], ...
-  while (scanHeightStart > 0 && batchSize <= maxBlocksToScan) {
-      const endHeight = scanHeightStart;
-      const startHeight = Math.max(scanHeightStart - batchSize + 1, 0);
-      
-      heightsToSearch.push({
-          start: startHeight,
-          end: endHeight
-      });
-      
-      scanHeightStart = startHeight - 1;
-      // Double batch size each time (exponential growth)
-      batchSize = batchSize * 2; 
-      
-      // Safety check for very large addresses
-      if (heightsToSearch.length >= maxRequestsPerPage) {
-          break;
-      }
-  }
-  
-  // Process heights in parallel batches
-  const processedRanges = [];
-  
-  // Extract the page-specific range based on page number
-  const pageOffset = (page - 1) * heightsToSearch.length / 2;
-  const rangesForThisPage = heightsToSearch.slice(
-      Math.min(Math.floor(pageOffset), heightsToSearch.length - 1),
-      Math.min(Math.floor(pageOffset) + maxRequestsPerPage, heightsToSearch.length)
-  );
-  
-  console.log(`Searching ${rangesForThisPage.length} block ranges for page ${page}`);
-  
-  // Execute RPC calls in parallel batches
-  const batchPromises = rangesForThisPage.map(async range => {
-      const cacheKey = `${JSON.stringify(addressParam)}_${range.start}_${range.end}`;
-      let cachedTxids = await loadFromIndexedDB('addressTxids', cacheKey);
-      
-      if (cachedTxids) {
-          console.log(`Cache hit for range ${range.start}-${range.end}`);
-          return { 
-              range, 
-              txids: cachedTxids.txids,
-              fromCache: true
-          };
-      }
-      
-      try {
-          console.log(`Searching blocks ${range.start} to ${range.end} for ${singleAddress}`);
-          const txids = await queueRpc('getaddresstxids', [{ 
-              ...addressParam, 
-              start: range.start, 
-              end: range.end 
-          }]);
-          
-          // Cache this range result
-          await saveToIndexedDB('addressTxids', { 
-              cacheKey, 
-              txids,
-              timestamp: Date.now()
-          });
-          
-          return { range, txids, fromCache: false };
-      } catch (error) {
-          console.error(`Error searching range ${range.start}-${range.end}:`, error);
-          return { range, txids: [], error: true };
-      }
-  });
-  
-  // Wait for all parallel requests to complete
-  const batchResults = await Promise.all(batchPromises);
-  
-  // Combine results in chronological order (oldest first)
-  let combinedTxids = [];
-  for (const result of batchResults.sort((a, b) => a.range.start - b.range.start)) {
-      if (result.txids && result.txids.length > 0) {
-          combinedTxids = [...combinedTxids, ...result.txids];
-      }
-  }
-  
-  // Store in comprehensive cache if it's a single address
-  if (singleAddress && combinedTxids.length > 0) {
-      // Update or create address data
-      let fullAddressData = await loadFromIndexedDB('addressFullData', singleAddress) || { 
-          address: singleAddress 
-      };
-      
-      // Merge with existing txids if available
-      if (fullAddressData.allTxids && Array.isArray(fullAddressData.allTxids)) {
-          // Create a Set to efficiently remove duplicates
-          const txidSet = new Set([...combinedTxids, ...fullAddressData.allTxids]);
-          fullAddressData.allTxids = Array.from(txidSet);
-      } else {
-          fullAddressData.allTxids = combinedTxids;
-      }
-      
-      fullAddressData.timestamp = Date.now();
-      
-      // Save back to comprehensive cache
-      await saveToIndexedDB('addressFullData', fullAddressData);
-      
-      console.log(`Updated comprehensive cache for ${singleAddress} with ${fullAddressData.allTxids.length} txids`);
-  }
-  
-  // Now handle pagination for the combined results
-  combinedTxids = combinedTxids.reverse(); // Most recent first
-  const hasMoreBlocks = batchResults.length > 0 && 
-                      batchResults[batchResults.length - 1].range.start > 0;
-  
-  // Slice for the current page
-  const pageTxids = combinedTxids.slice(0, perPage);
-  const hasMore = combinedTxids.length > perPage || hasMoreBlocks;
-  
-  // Cache the page result for faster access next time
-  if (singleAddress) {
-      const pageKey = `${singleAddress}_page_${page}`;
-      await saveToIndexedDB('addressTxids', { 
-          cacheKey: pageKey, 
-          txids: pageTxids, 
-          hasMore,
-          timestamp: Date.now()
-      });
-  }
-  
-  return { pageTxids, hasMore };
+  return { pageTxids, hasMore, total };
 }
 
 // Improved UTXO function with better caching
@@ -734,7 +572,7 @@ async function listAddressesByAsset(assetName, onlytotal = false, count = 10, st
   
   // Check cache first
   const cachedData = await loadFromIndexedDB('assetHoldersCache', cacheKey);
-  if (cachedData && (Date.now() - cachedData.timestamp < ASSET_DATA_CACHE_DURATION)) {
+  if (cachedData && (Date.now() - cachedData.timestamp < UTXO_CACHE_DURATION)) {
     return cachedData.holders;
   }
   
@@ -763,7 +601,7 @@ async function listAssetBalancesByAddress(address, onlytotal = false, count = 10
   
   // Then check specific cache
   const cachedData = await loadFromIndexedDB('misc', cacheKey);
-  if (cachedData && (Date.now() - cachedData.timestamp < ASSET_DATA_CACHE_DURATION)) {
+  if (cachedData && (Date.now() - cachedData.timestamp < ADDRESS_DATA_CACHE_DURATION)) {
     return cachedData.result;
   }
   
@@ -809,6 +647,14 @@ async function listAssets(asset = '', verbose = false, count = 9999999, start = 
   });
   
   return assets;
+}
+
+async function getVerifierString(assetName) {
+  return queueRpc('getverifierstring', [assetName]);
+}
+
+async function checkGlobalRestriction(assetName) {
+  return queueRpc('checkglobalrestriction', [assetName]);
 }
 
 // ### Blockchain Functions ###
@@ -875,7 +721,7 @@ async function getBlockCount() {
 // Enhanced block hash lookup with better caching
 async function getBlockHash(height) {
   const cachedHash = await loadFromIndexedDB('heightToHash', height);
-  if (cachedHash) return cachedHash.hash;
+  if (cachedHash && cachedHash.timestamp && Date.now() - cachedHash.timestamp < 300000) return cachedHash.hash;
   
   const hash = await queueRpc('getblockhash', [height]);
   
@@ -965,6 +811,40 @@ async function getMempoolInfo() {
 
 async function getRawMempool(verbose = false) {
   return await queueRpc('getrawmempool', [verbose]);
+}
+
+// Return recent user transactions, excluding the mandatory coinbase entry.
+// Blocks are scanned newest first and transactions are sorted by block time.
+async function getRecentTransactions(limit = 20, maxBlocks = 50) {
+  const height = await getBlockCount();
+  const transactions = [];
+  const batchSize = 8;
+  for (let offset = 0; offset < maxBlocks && height - offset >= 0 && transactions.length < limit; offset += batchSize) {
+    const heights = Array.from(
+      { length: Math.min(batchSize, maxBlocks - offset, height - offset + 1) },
+      (_, index) => height - offset - index
+    );
+    const hashes = await Promise.all(heights.map(blockHeight => getBlockHash(blockHeight)));
+    const blocks = await Promise.all(hashes.map(hash => getBlock(hash, 2)));
+    for (const block of blocks) {
+      for (const tx of block.tx || []) {
+        const fullTx = typeof tx === 'string' ? await getTransaction(tx) : tx;
+        if (window.KawTraceCore.isCoinbaseTransaction(fullTx)) continue;
+        fullTx.blockhash = fullTx.blockhash || block.hash;
+        fullTx.blockheight = fullTx.blockheight ?? block.height;
+        fullTx.time = fullTx.time || block.time;
+        transactions.push({
+          tx: fullTx,
+          blockheight: block.height,
+          confirmations: height - block.height + 1,
+          time: fullTx.time
+        });
+        if (transactions.length >= limit) break;
+      }
+      if (transactions.length >= limit) break;
+    }
+  }
+  return transactions.sort((a, b) => b.time - a.time).slice(0, limit);
 }
 
 // Improved spent info check with better caching
@@ -1321,7 +1201,9 @@ async function getTransactionDetails(txid) {
 // Improved block metadata function
 async function getBlockMetadata(height) {
   const cachedMetadata = await loadFromIndexedDB('blockMetadata', height);
-  if (cachedMetadata) return cachedMetadata;
+  if (cachedMetadata && cachedMetadata.timestamp && Date.now() - cachedMetadata.timestamp < 300000) {
+    return cachedMetadata;
+  }
   
   // Get block hash first
   const hash = await getBlockHash(height);
@@ -1335,7 +1217,8 @@ async function getBlockMetadata(height) {
     hash: block.hash, 
     time: block.time,
     size: block.size,
-    tx_count: block.tx ? block.tx.length : 0
+    tx_count: block.tx ? block.tx.length : 0,
+    timestamp: Date.now()
   };
   
   // Cache indefinitely
@@ -1694,7 +1577,7 @@ async function getAddressDetails(address, page = 1) {
     const pageTxids = txidsData.pageTxids;
     const hasMore = txidsData.hasMore;
 
-    // Get basic EVR balance info
+    // Get basic RVN balance info
     let balance, utxos, assetBalances;
     
     // Try to get from address cache first
@@ -1721,7 +1604,7 @@ async function getAddressDetails(address, page = 1) {
       });
     }
 
-    // Format EVR balance
+    // Format RVN balance
     const formattedBalance = (balance / 1e8).toFixed(8);
     
     // Get asset balances
@@ -1732,6 +1615,7 @@ async function getAddressDetails(address, page = 1) {
       balance: formattedBalance,
       assetBalances,
       pageTxids,
+      total: txidsData.total,
       currentPage: page,
       hasMore
     };
@@ -1846,11 +1730,12 @@ async function getAssetsFromUTXOs(address) {
           const tx = txData.tx;
           
           // Check if this output has asset information
-          if (tx && tx.vout && tx.vout[utxo.vout]) {
-            const vout = tx.vout[utxo.vout];
+          const outputIndex = utxo.outputIndex ?? utxo.vout;
+          if (tx && tx.vout && tx.vout[outputIndex]) {
+            const vout = tx.vout[outputIndex];
             if (vout.scriptPubKey && vout.scriptPubKey.asset) {
               const asset = vout.scriptPubKey.asset;
-              if (asset.name && asset.name !== 'EVR') {
+              if (asset.name && asset.name !== 'RVN') {
                 if (!assetMap[asset.name]) {
                   assetMap[asset.name] = 0;
                 }
@@ -1862,7 +1747,7 @@ async function getAssetsFromUTXOs(address) {
         // If the UTXO already has asset info
         else if (utxo.scriptPubKey.asset) {
           const asset = utxo.scriptPubKey.asset;
-          if (asset.name && asset.name !== 'EVR') {
+          if (asset.name && asset.name !== 'RVN') {
             if (!assetMap[asset.name]) {
               assetMap[asset.name] = 0;
             }
@@ -1914,14 +1799,7 @@ function formatAssetAmount(amount, units) {
   // Ensure units is a number
   const unitsValue = Number(units) || 0;
   
-  if (unitsValue === 0) {
-    return amount.toLocaleString();
-  } else {
-    return (amount / Math.pow(10, unitsValue)).toLocaleString(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: unitsValue
-    });
-  }
+  return window.KawTraceCore.formatAssetAmount(amount, unitsValue);
 }
 
 // Get cache stats (for debugging and monitoring)
@@ -2067,6 +1945,8 @@ window.utilities = {
   listAddressesByAsset,
   listAssetBalancesByAddress,
   listAssets,
+  getVerifierString,
+  checkGlobalRestriction,
 
   // Blockchain
   decodeBlock,
@@ -2083,6 +1963,7 @@ window.utilities = {
   getMempoolEntry,
   getMempoolInfo,
   getRawMempool,
+  getRecentTransactions,
   getSpentInfo,
   getTxOut,
   getTxOutProof,
@@ -2091,14 +1972,9 @@ window.utilities = {
   help,
   getNetworkHashPs,
 
-  // Rawtransactions
-  combineRawTransaction,
-  createRawTransaction,
+  // Read-only raw transaction inspection
   decodeRawTransaction,
   decodeScript,
-  sendRawTransaction,
-  signRawTransaction,
-  testMempoolAccept
 };
 
 window.utilities.setCacheDurations = setCacheDurations;

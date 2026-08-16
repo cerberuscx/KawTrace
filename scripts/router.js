@@ -1,4 +1,4 @@
-// router.js - Hash-based routing for EVR Tracky Boi
+// router.js - Hash-based routing for KawTrace
 
 // Route types and mapping
 const ROUTES = {

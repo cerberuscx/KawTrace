@@ -1,4 +1,4 @@
-// EVR Tracky Boi - Addresses Explorer Functionality
+// KawTrace - Addresses Explorer Functionality
 
 // Load addresses view (mostly a placeholder for search)
 function loadAddressesView() {
@@ -11,9 +11,9 @@ function loadAddressesView() {
                 <div class="addresses-container">
                     <h2>Address Explorer</h2>
                     <div class="address-search-container">
-                        <p>Enter an Evrmore address to view its details.</p>
+                        <p>Enter a Ravencoin address to view its details.</p>
                         <div class="address-search">
-                            <input type="text" id="address-search-input" placeholder="Enter an Evrmore address...">
+                            <input type="text" id="address-search-input" placeholder="Enter an Ravencoin address...">
                             <button id="search-address">Search</button>
                         </div>
                     </div>
@@ -27,7 +27,7 @@ function loadAddressesView() {
                 if (address) {
                     window.app.navigateToAddressDetails(address);
                 } else {
-                    UI.showNotification('Error', 'Please enter a valid Evrmore address.', 'error');
+                    UI.showNotification('Error', 'Please enter a valid Ravencoin address.', 'error');
                 }
             });
             
@@ -37,7 +37,7 @@ function loadAddressesView() {
                     if (address) {
                         window.app.navigateToAddressDetails(address);
                     } else {
-                        UI.showNotification('Error', 'Please enter a valid Evrmore address.', 'error');
+                        UI.showNotification('Error', 'Please enter a valid Ravencoin address.', 'error');
                     }
                 }
             });
@@ -76,7 +76,7 @@ async function displayAddressDetails(address) {
         const addressDetails = await window.utilities.getAddressDetails(address, page);
         
         // Update address balance
-        balanceEl.textContent = `${addressDetails.balance} EVR`;
+        balanceEl.textContent = `${addressDetails.balance} RVN`;
         
         // Enable/disable pagination buttons
         nextPageBtn.disabled = !addressDetails.hasMore;
@@ -84,26 +84,7 @@ async function displayAddressDetails(address) {
         // Display assets
         displayAddressAssets(addressDetails.assetBalances, assetsTableEl);
         
-        // Get total transaction count - this is the fix!
-        // First try to get it from the fullAddressData cache
-        let totalTxCount = 0;
-        const fullAddressData = await window.utilities.loadFromIndexedDB('addressFullData', address);
-        if (fullAddressData && fullAddressData.allTxids) {
-            totalTxCount = fullAddressData.allTxids.length;
-        } else {
-            // If not available in cache, make a specific call to get the total count
-            try {
-                const txids = await window.utilities.callRpc('getaddresstxids', [{ addresses: [address] }]);
-                totalTxCount = txids.length;
-            } catch (error) {
-                console.warn('Could not get total transaction count:', error);
-                // Fallback to page count if total count is unavailable
-                totalTxCount = addressDetails.pageTxids ? addressDetails.pageTxids.length : 0;
-            }
-        }
-        
-        // Update the transaction count with the total (not just page count)
-        txCountEl.textContent = totalTxCount.toString();
+        txCountEl.textContent = Number(addressDetails.total || 0).toLocaleString();
         
         // Track if transactions are loaded using a data attribute on the address view
         const addressView = document.getElementById('address-details-view');
@@ -376,7 +357,7 @@ async function displayAddressTransactions(address, txIds, tableBody) {
                 <td>${tx.tx.blockhash ? `<a href="#" data-block-hash="${tx.tx.blockhash}" class="block-link">${blockInfo}</a>` : blockInfo}</td>
                 <td>${tx.tx.time ? window.app.formatTime(tx.tx.time) : 'Pending'}</td>
                 <td>${tx.type.charAt(0).toUpperCase() + tx.type.slice(1)}</td>
-                <td>${totalValue.toFixed(8)} EVR</td>
+                <td>${totalValue.toFixed(8)} RVN</td>
                 <td class="${tx.balanceChange > 0 ? 'balance-positive' : tx.balanceChange < 0 ? 'balance-negative' : ''}">${formatBalanceChange(tx.balanceChange)}</td>
             `;
             tableBody.appendChild(row);
@@ -577,10 +558,10 @@ async function analyzeTransactionForAddress(tx, address) {
 
 // Format balance change with sign
 function formatBalanceChange(change) {
-    if (change === 0) return '0.00000000 EVR';
+    if (change === 0) return '0.00000000 RVN';
     
     const sign = change > 0 ? '+' : '';
-    return `${sign}${change.toFixed(8)} EVR`;
+    return `${sign}${change.toFixed(8)} RVN`;
 }
 
 // Export functions

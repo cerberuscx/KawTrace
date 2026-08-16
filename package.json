@@ -1,0 +1,11 @@
+{
+  "name": "kawtrace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Serverless Ravencoin block and asset explorer",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check scripts/core.js && node --check scripts/utilities.js && node --check scripts/ui.js && node --check scripts/blocks.js && node --check scripts/transactions.js && node --check scripts/addresses.js && node --check scripts/assets.js && node --check scripts/search.js && node --check scripts/router.js && node --check scripts/tracing.js && node --check scripts/settings.js && node --check scripts/app.js",
+    "build:single": "node tools/build-single-file.mjs"
+  }
+}

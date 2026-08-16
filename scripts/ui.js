@@ -1,4 +1,4 @@
-// EVR Tracky Boi - UI Utilities
+// KawTrace - UI Utilities
 
 // UI utilities object
 const UI = {

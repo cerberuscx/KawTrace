@@ -1,4 +1,4 @@
-// EVR Tracky Boi - Assets Explorer Functionality
+// KawTrace - Assets Explorer Functionality
 
 // Load assets view
 async function loadAssetsView() {
@@ -184,13 +184,10 @@ async function displayAssetHolders(assetName) {
         
         console.log(`Loading asset holders page ${page} with ${perPage} per page, sorted by ${sorting.field} ${sorting.direction}`);
         
-        // We need to get all holders to sort them properly
-        // This approach might need optimization for assets with many holders
-        // For now, we'll fetch a large number
-        const fetchLimit = 1000; // Fetch up to 1000 holders
-        const start = 0; // Start from the beginning to get all holders
-        
-        // Get all asset holders
+        // The public endpoint does not allow an exact holder count. Fetch one
+        // extra row so pagination remains truthful without truncating at 1,000.
+        const fetchLimit = perPage + 1;
+        const start = (page - 1) * perPage;
         const holdersData = await window.utilities.listAddressesByAsset(assetName, false, fetchLimit, start);
         console.log(`Received ${Object.keys(holdersData).length} holders`);
         
@@ -213,10 +210,11 @@ async function displayAssetHolders(assetName) {
             return;
         }
         
-        // Process all holders
+        const holderEntries = Object.entries(holdersData);
+        const hasNextPage = holderEntries.length > perPage;
+        // Process the current server-side page.
         const holders = [];
-        for (const address in holdersData) {
-            const amount = holdersData[address];
+        for (const [address, amount] of holderEntries.slice(0, perPage)) {
             const percentage = (amount / totalSupply) * 100;
             
             holders.push({
@@ -246,18 +244,13 @@ async function displayAssetHolders(assetName) {
             });
         }
         
-        // Apply pagination to the sorted results
-        const startIndex = (page - 1) * perPage;
-        const endIndex = startIndex + perPage;
-        const pageHolders = holders.slice(startIndex, endIndex);
-        
         // Display the current page of holders
-        for (const holder of pageHolders) {
+        for (const holder of holders) {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><a href="#" data-address="${holder.address}" class="address-link">${holder.address}</a></td>
-                <td>${holder.amount.toLocaleString()}</td>
-                <td>${holder.percentage.toFixed(2)}%</td>
+                <td>${window.KawTraceCore.formatAssetAmount(holder.amount, units)}</td>
+                <td>${window.KawTraceCore.formatPercentage(holder.percentage)}</td>
             `;
             tableBody.appendChild(row);
         }
@@ -272,17 +265,16 @@ async function displayAssetHolders(assetName) {
         });
         
         // Update pagination UI with explicit checks
-        if (pageInfoEl) pageInfoEl.textContent = `Page ${page} of ${Math.ceil(holders.length / perPage)}`;
+        if (pageInfoEl) pageInfoEl.textContent = `Page ${page}`;
         if (prevPageBtn) {
             prevPageBtn.disabled = page <= 1;
             console.log(`Previous button disabled: ${page <= 1}`);
         }
         if (nextPageBtn) {
-            nextPageBtn.disabled = endIndex >= holders.length;
-            console.log(`Next button disabled: ${endIndex >= holders.length}`);
+            nextPageBtn.disabled = !hasNextPage;
         }
         
-        console.log(`Displayed ${pageHolders.length} holders for page ${page}`);
+        console.log(`Displayed ${holders.length} holders for page ${page}`);
     } catch (error) {
         console.error('Error displaying asset holders:', error);
         tableBody.innerHTML = '<tr><td colspan="3" class="loading-row">Error loading holders</td></tr>';
@@ -336,7 +328,7 @@ async function loadAssetsList() {
     const nextButton = document.getElementById('next-assets-page');
     
     // Show loading indicator
-    tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Loading assets...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="loading-row">Loading assets...</td></tr>';
     
     try {
         const { page, perPage } = window.app.appState.assetsPagination;
@@ -355,53 +347,26 @@ async function loadAssetsList() {
         tbody.innerHTML = '';
         
         if (Object.keys(assets).length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="loading-row">No assets found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="loading-row">No assets found</td></tr>';
             nextButton.disabled = true;
             return;
         }
         
-        // Process assets and get detailed info for each
+        // Verbose listassets already provides the fields required by the table.
         const assetList = [];
-        const assetsToFetch = [];
         
         for (const assetName in assets) {
             if (assetName !== '') { // Skip the empty asset name
-                assetList.push({
-                    name: assetName,
-                    ...assets[assetName]
-                });
+                assetList.push(window.KawTraceCore.normalizeAssetRecord(assetName, assets[assetName]));
                 
-                // Add to list of assets that need detailed info
-                assetsToFetch.push(assetName);
             }
         }
         
         // Sort assets by name
         assetList.sort((a, b) => a.name.localeCompare(b.name));
         
-        // Fetch detailed asset data in parallel for each asset
-        const assetDetailsPromises = assetsToFetch.map(name => window.utilities.getAssetData(name));
-        const assetDetailsResults = await Promise.allSettled(assetDetailsPromises);
-        
-        // Create a map of asset details
-        const assetDetailsMap = new Map();
-        for (let i = 0; i < assetsToFetch.length; i++) {
-            const result = assetDetailsResults[i];
-            if (result.status === 'fulfilled') {
-                assetDetailsMap.set(assetsToFetch[i], result.value);
-            }
-        }
-        
-        // Display assets with IPFS data where available
+        // Display assets with IPFS data where available.
         for (const asset of assetList) {
-            // Get detailed asset data if available
-            const detailedData = assetDetailsMap.get(asset.name);
-            if (detailedData) {
-                // Add IPFS info to the asset object
-                asset.has_ipfs = detailedData.has_ipfs || false;
-                asset.ipfs_hash = detailedData.ipfs_hash || '';
-            }
-            
             // Create and append the row
             const row = createAssetRow(asset);
             tbody.appendChild(row);
@@ -431,7 +396,7 @@ async function loadAssetsList() {
         nextButton.disabled = assetList.length < perPage;
     } catch (error) {
         console.error('Error loading assets list:', error);
-        tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Error loading assets</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="loading-row">Error loading assets</td></tr>';
     }
 }
 
@@ -443,18 +408,17 @@ async function performLiveAssetSearch(assetPrefix) {
     const nextButton = document.getElementById('next-assets-page');
     
     // Show loading indicator
-    tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Searching assets...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="loading-row">Searching assets...</td></tr>';
     
     try {
         // Get assets that match the prefix
-        const assets = await window.utilities.listAssets('', true, 999999, 0);
+        const assets = await window.utilities.listAssets(`${assetPrefix}*`, true, 100, 0);
         
         // Clear table
         tbody.innerHTML = '';
         
         // Filter assets based on prefix match (starts with) and exclude those ending with !
         const assetList = [];
-        const assetsToFetch = [];
         const searchTerm = assetPrefix.toLowerCase();
         
         for (const assetName in assets) {
@@ -462,19 +426,14 @@ async function performLiveAssetSearch(assetPrefix) {
             if (assetName !== '' && !assetName.endsWith('!')) {
                 // Check if the asset name STARTS WITH the search term (prefix match)
                 if (assetName.toLowerCase().startsWith(searchTerm)) {
-                    assetList.push({
-                        name: assetName,
-                        ...assets[assetName]
-                    });
+                    assetList.push(window.KawTraceCore.normalizeAssetRecord(assetName, assets[assetName]));
                     
-                    // Add to list of assets that need detailed info
-                    assetsToFetch.push(assetName);
                 }
             }
         }
         
         if (assetList.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="loading-row">No matching assets found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="loading-row">No matching assets found</td></tr>';
             // Disable pagination during live search
             pageInfo.textContent = 'Search Results';
             prevButton.disabled = true;
@@ -486,35 +445,13 @@ async function performLiveAssetSearch(assetPrefix) {
         assetList.sort((a, b) => a.name.localeCompare(b.name));
         
         // Limit results to avoid overwhelming the display
-        const limitedResults = assetList.slice(0, 999);
-        const limitedFetch = assetsToFetch.slice(0, 999);
-        
-        // Fetch detailed asset data in parallel for displayed assets
-        const assetDetailsPromises = limitedFetch.map(name => window.utilities.getAssetData(name));
-        const assetDetailsResults = await Promise.allSettled(assetDetailsPromises);
-        
-        // Create a map of asset details
-        const assetDetailsMap = new Map();
-        for (let i = 0; i < limitedFetch.length; i++) {
-            const result = assetDetailsResults[i];
-            if (result.status === 'fulfilled') {
-                assetDetailsMap.set(limitedFetch[i], result.value);
-            }
-        }
+        const limitedResults = assetList.slice(0, 100);
         
         // Add CSS for thumbnails if not already present
         addThumbnailStyles();
         
         // Display assets with IPFS data where available
         for (const asset of limitedResults) {
-            // Get detailed asset data if available
-            const detailedData = assetDetailsMap.get(asset.name);
-            if (detailedData) {
-                // Add IPFS info to the asset object
-                asset.has_ipfs = detailedData.has_ipfs || false;
-                asset.ipfs_hash = detailedData.ipfs_hash || '';
-            }
-            
             // Create and append the row
             const row = createAssetRow(asset);
             tbody.appendChild(row);
@@ -543,7 +480,7 @@ async function performLiveAssetSearch(assetPrefix) {
         nextButton.disabled = true;
     } catch (error) {
         console.error('Error performing live asset search:', error);
-        tbody.innerHTML = '<tr><td colspan="4" class="loading-row">Error searching assets</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="loading-row">Error searching assets</td></tr>';
     }
 }
 
@@ -639,7 +576,7 @@ function createAssetRow(asset) {
                         <div class="ipfs-preview">
                             <img src="${ipfsUrl}" 
                                  alt="IPFS Preview" 
-                                 onerror="this.onerror=null; this.src='#/img/ipfs-placeholder.png'; this.alt='Unable to load IPFS image';">
+                                 onerror="this.onerror=null; this.style.display='none'; this.alt='Unable to load IPFS image';">
                         </div>
                     </div>
                     <a href="#" data-asset="${asset.name}" class="asset-link">${asset.name}</a>
@@ -654,6 +591,7 @@ function createAssetRow(asset) {
     row.innerHTML = `
         ${nameCell}
         <td>${asset.amount}</td>
+        <td>${asset.units}</td>
         <td>${asset.reissuable ? 'Yes' : 'No'}</td>
         <td>${asset.has_ipfs ? 'Yes' : 'No'}</td>
     `;
@@ -709,6 +647,30 @@ async function displayAssetDetails(assetName) {
         if (elements.unitsEl) elements.unitsEl.textContent = assetData.units;
         if (elements.reissuableEl) elements.reissuableEl.textContent = assetData.reissuable ? 'Yes' : 'No';
         if (elements.hasIpfsEl) elements.hasIpfsEl.textContent = assetData.has_ipfs ? 'Yes' : 'No';
+
+        const restrictedContainer = document.getElementById('asset-restricted-container');
+        const restrictionContainer = document.getElementById('asset-global-restriction-container');
+        if (assetName.startsWith('$')) {
+            const [verifierResult, restrictionResult] = await Promise.allSettled([
+                window.utilities.getVerifierString(assetName),
+                window.utilities.checkGlobalRestriction(assetName)
+            ]);
+            if (restrictedContainer) {
+                restrictedContainer.hidden = false;
+                document.getElementById('asset-detail-verifier').textContent = verifierResult.status === 'fulfilled'
+                    ? (verifierResult.value.verifier_string || verifierResult.value.verifier || String(verifierResult.value))
+                    : 'Unavailable';
+            }
+            if (restrictionContainer) {
+                restrictionContainer.hidden = false;
+                document.getElementById('asset-detail-global-restriction').textContent = restrictionResult.status === 'fulfilled'
+                    ? (restrictionResult.value ? 'Yes' : 'No')
+                    : 'Unavailable';
+            }
+        } else {
+            if (restrictedContainer) restrictedContainer.hidden = true;
+            if (restrictionContainer) restrictionContainer.hidden = true;
+        }
         
         // Show/hide IPFS hash and image
         if (assetData.has_ipfs && elements.ipfsContainerEl && elements.ipfsEl) {
@@ -739,7 +701,7 @@ async function displayAssetDetails(assetName) {
                             <a href="${ipfsUrl}" target="_blank" class="ipfs-link">View on IPFS</a>
                             <div class="ipfs-image-wrapper">
                                 <img src="${ipfsUrl}" alt="IPFS content for ${assetName}" class="ipfs-image-detail" 
-                                     onerror="this.onerror=null; this.src='/img/ipfs-placeholder.png'; this.alt='Unable to load IPFS image';">
+                                     onerror="this.onerror=null; this.style.display='none'; this.alt='Unable to load IPFS image';">
                             </div>
                         </div>
                     `;
