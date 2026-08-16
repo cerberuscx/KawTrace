@@ -109,13 +109,14 @@
                     
                     <div class="dashboard-card latest-transactions">
                         <h2>Latest Transactions</h2>
+                        <p class="data-disclosure">Recent user transactions. Mining reward transactions are shown within block details.</p>
                         <div class="table-container">
                             <table id="latest-txs-table">
                                 <thead>
                                     <tr>
                                         <th>Transaction ID</th>
                                         <th>Time</th>
-                                        <th>Output Total</th>
+                                        <th title="Includes recipient, change, burn, and protocol outputs. This is not the net payment amount.">Total RVN Outputs</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
@@ -132,7 +133,8 @@
                     </div>
                     
                     <div class="dashboard-card mempool-activity">
-                        <h2>Mempool Activity</h2>
+                        <h2>RPC Node Mempool Activity</h2>
+                        <p class="data-disclosure">Transactions currently visible to the selected RPC endpoint. There is no canonical global mempool.</p>
                         <div class="mempool-chart-container">
                             <canvas id="mempool-chart"></canvas>
                         </div>
@@ -234,7 +236,7 @@
                             <th>Time</th>
                             <th>Inputs</th>
                             <th>Outputs</th>
-                            <th>Output Total (RVN)</th>
+                            <th title="Includes recipient, change, burn, and protocol outputs. This is not the net payment amount.">Total RVN Outputs</th>
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -309,6 +311,40 @@
                     <span class="value" id="block-detail-confirmations"></span>
                 </div>
             </div>
+            <section class="coinbase-summary" id="coinbase-summary">
+                <h3>Mining Reward</h3>
+                <div class="block-summary">
+                    <div class="summary-item">
+                        <span class="label">Coinbase Transaction:</span>
+                        <span class="value"><a href="#" id="coinbase-txid"></a></span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Total Miner Payout:</span>
+                        <span class="value" id="coinbase-payout"></span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Reward Component:</span>
+                        <span class="value" id="coinbase-subsidy"></span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Included Transaction Fees:</span>
+                        <span class="value" id="coinbase-fees"></span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Payout Outputs:</span>
+                        <span class="value" id="coinbase-output-count"></span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">Maturity:</span>
+                        <span class="value" id="coinbase-maturity"></span>
+                    </div>
+                    <div class="summary-item address-field">
+                        <span class="label">Payout Destinations:</span>
+                        <span class="value" id="coinbase-addresses"></span>
+                    </div>
+                </div>
+                <p class="data-disclosure">The reward component is the miner payout minus exactly resolved transaction fees. It is unavailable when any fee cannot be resolved.</p>
+            </section>
             <h3>Block Transactions (<span id="block-detail-tx-count"></span>)</h3>
             <div class="table-container">
                 <table id="block-transactions-table">
@@ -318,7 +354,7 @@
                             <th>Type</th>
                             <th>Inputs</th>
                             <th>Outputs</th>
-                                    <th>Output Total (RVN)</th>
+                            <th title="Includes recipient, change, burn, and protocol outputs. This is not the net payment amount.">Total RVN Outputs</th>
                         </tr>
                     </thead>
                     <tbody id="block-transactions-body"></tbody>
@@ -376,7 +412,7 @@
             </div>
             
             <div class="tx-assets-container">
-                <h3>Assets Transferred</h3>
+                <h3>Asset Outputs</h3>
                 <div id="tx-assets-list">
                     <p>No assets transferred in this transaction.</p>
                 </div>

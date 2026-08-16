@@ -220,11 +220,65 @@ async function deleteFromIndexedDB(storeName, key) {
   }
 }
 
+async function clearIndexedDbStores(storeNames) {
+  const db = await openDatabase();
+  for (const storeName of storeNames) {
+    if (!db.objectStoreNames.contains(storeName)) continue;
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readwrite');
+      const request = transaction.objectStore(storeName).clear();
+      request.onsuccess = () => resolve();
+      request.onerror = event => reject(event.target.error);
+    });
+  }
+}
+
+async function invalidateRecentChainCaches() {
+  await clearIndexedDbStores([
+    'heightToHash', 'blockMetadata', 'assetsCache', 'assetData', 'addressTxids',
+    'spendingTxCache', 'blocks', 'transactions', 'addressCache',
+    'outputStatusCache', 'transactionDetailsCache', 'blockDetailsCache',
+    'mempoolCache', 'utxoCache', 'addressFullData', 'assetHoldersCache',
+    'assetTxsCache', 'blockRangeCache'
+  ]);
+}
+
+async function validateChainTip(chainInfo) {
+  if (!chainInfo || !Number.isInteger(chainInfo.blocks) || !chainInfo.bestblockhash) return false;
+  const cacheKey = 'validated_chain_tip_v1';
+  const previous = await loadFromIndexedDB('misc', cacheKey);
+  let reorgDetected = false;
+
+  if (previous?.height !== undefined && previous?.hash) {
+    if (chainInfo.blocks < previous.height) {
+      reorgDetected = window.KawTraceCore.isChainReorganization(previous, chainInfo);
+    } else if (chainInfo.blocks === previous.height) {
+      reorgDetected = window.KawTraceCore.isChainReorganization(previous, chainInfo);
+    } else {
+      try {
+        const canonicalPreviousHash = await queueRpc('getblockhash', [previous.height]);
+        reorgDetected = window.KawTraceCore.isChainReorganization(previous, chainInfo, canonicalPreviousHash);
+      } catch (error) {
+        console.warn('Unable to validate the previous chain tip:', error);
+      }
+    }
+  }
+
+  if (reorgDetected) await invalidateRecentChainCaches();
+  await saveToIndexedDB('misc', {
+    id: cacheKey,
+    height: chainInfo.blocks,
+    hash: chainInfo.bestblockhash,
+    timestamp: Date.now()
+  });
+  return reorgDetected;
+}
+
 
 // Modified queue RPC function to use dynamic max concurrent
-async function queueRpc(method, params = []) {
+async function queueRpc(method, params = [], options = {}) {
   return new Promise((resolve, reject) => {
-    rpcQueue.push({ method, params, resolve, reject });
+    rpcQueue.push({ method, params, options, resolve, reject });
     processQueue();
   });
 }
@@ -233,9 +287,9 @@ async function queueRpc(method, params = []) {
 async function processQueue() {
   if (activeRequests >= MAX_CONCURRENT_REQUESTS || !rpcQueue.length) return;
   activeRequests++;
-  const { method, params, resolve, reject } = rpcQueue.shift();
+  const { method, params, options, resolve, reject } = rpcQueue.shift();
   try {
-    const result = await callRpc(method, params);
+    const result = await callRpc(method, params, options);
     resolve(result);
   } catch (e) {
     reject(e);
@@ -265,7 +319,7 @@ function createCacheKey(method, params) {
 }
 
 // RPC Call Function with Enhanced Caching
-async function callRpc(method, params = []) {
+async function callRpc(method, params = [], options = {}) {
   const cacheKey = createCacheKey(method, params);
   const cachedData = await loadFromIndexedDB('misc', cacheKey);
   const now = Date.now();
@@ -386,7 +440,7 @@ async function callRpc(method, params = []) {
     
     return result;
   } catch (error) {
-    console.error(`RPC error for ${method}:`, error);
+    if (!options.quiet) console.error(`RPC error for ${method}:`, error);
     throw error;
   } finally {
     // Remove this request from tracking
@@ -690,11 +744,11 @@ async function getBestBlockHash() {
 }
 
 // Improved block retrieval with enhanced caching
-async function getBlock(blockHash, verbosity = 2) {
+async function getBlock(blockHash, verbosity = 2, options = {}) {
   const cachedBlock = await loadFromIndexedDB('blocks', blockHash);
   if (cachedBlock) return cachedBlock.data;
   
-  const block = await queueRpc('getblock', [blockHash, verbosity]);
+  const block = await queueRpc('getblock', [blockHash, verbosity], options);
   
   // Cache the block indefinitely - blocks don't change once confirmed
   await saveToIndexedDB('blocks', { 
@@ -872,7 +926,7 @@ async function getSpentInfo(txid, vout) {
     }
     
     // Make the RPC call
-    const result = await queueRpc('getspentinfo', [{ txid: txid, index: vout }]);
+    const result = await queueRpc('getspentinfo', [{ txid: txid, index: vout }], { quiet: true });
     
     // Cache the result
     await saveToIndexedDB('spendingTxCache', { 
@@ -883,7 +937,7 @@ async function getSpentInfo(txid, vout) {
     
     return result;
   } catch (e) {
-    console.error(`Error in getSpentInfo for ${txid}:${vout}: ${e.message}`);
+    console.warn(`getspentinfo unavailable for ${txid}:${vout}: ${e.message}`);
     
     // Cache the null result but with a shorter duration
     const cacheKey = `spentInfo_${txid}_${vout}`;
@@ -1164,7 +1218,13 @@ async function getTransactionDetails(txid) {
     if (cachedDetails.data.confirmations > 1) {
       // Only invalidate if it was cached more than an hour ago (confirmations may increase)
       if (now - cachedDetails.timestamp < 3600000) {
-        return cachedDetails.data;
+        const currentHeight = await getBlockCount();
+        const blockheight = cachedDetails.data.blockheight;
+        return {
+          ...cachedDetails.data,
+          currentHeight,
+          confirmations: blockheight ? currentHeight - blockheight + 1 : 0
+        };
       }
     } else if (now - cachedDetails.timestamp < MEMPOOL_CACHE_DURATION) {
       // For mempool/unconfirmed transactions, shorter cache
@@ -1289,7 +1349,12 @@ async function getBlockDetails(blockId) {
     
     // Only refresh cache if it's old (blocks are mostly immutable, just confirmations change)
     if (now - cachedDetails.timestamp < 3600000) { // 1 hour
-      return cachedDetails.data;
+      const currentHeight = await getBlockCount();
+      return {
+        ...cachedDetails.data,
+        currentHeight,
+        confirmations: currentHeight - cachedDetails.data.block.height + 1
+      };
     }
   }
   
@@ -1968,6 +2033,7 @@ window.utilities = {
   getMempoolInfo,
   getRawMempool,
   getRecentTransactions,
+  validateChainTip,
   getSpentInfo,
   getTxOut,
   getTxOutProof,

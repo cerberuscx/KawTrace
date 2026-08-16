@@ -87,6 +87,31 @@
         return tx.vout.reduce((total, output) => total + (Number(output.value) || 0), 0);
     }
 
+    function classifyAssetOperation(asset) {
+        const type = String(asset?.type ?? asset?.asset_type ?? asset?.operation ?? '').toLowerCase();
+        const explicitTypes = new Map([
+            ['new', 'New issuance'],
+            ['new_asset', 'New issuance'],
+            ['issue', 'New issuance'],
+            ['reissue', 'Reissue'],
+            ['reissue_asset', 'Reissue'],
+            ['transfer', 'Transfer'],
+            ['transfer_asset', 'Transfer'],
+            ['restricted_transfer', 'Restricted transfer'],
+            ['transfer_restricted_asset', 'Restricted transfer'],
+            ['qualifier', 'Qualifier operation'],
+            ['tag', 'Tag operation']
+        ]);
+        return explicitTypes.get(type) || 'Asset output';
+    }
+
+    function isChainReorganization(previous, current, canonicalPreviousHash = null) {
+        if (!previous?.hash || !Number.isInteger(previous.height) || !current?.bestblockhash || !Number.isInteger(current.blocks)) return false;
+        if (current.blocks < previous.height) return true;
+        if (current.blocks === previous.height) return current.bestblockhash !== previous.hash;
+        return typeof canonicalPreviousHash === 'string' && canonicalPreviousHash !== previous.hash;
+    }
+
     function paginateNewestTxids(txids, page = 1, perPage = 10) {
         const newestFirst = [...new Set(Array.isArray(txids) ? txids : [])].reverse();
         const safePage = Math.max(1, Number(page) || 1);
@@ -113,6 +138,8 @@
         formatAssetAmount,
         isCoinbaseTransaction,
         transactionOutputTotal,
+        classifyAssetOperation,
+        isChainReorganization,
         paginateNewestTxids,
         formatPercentage
     };

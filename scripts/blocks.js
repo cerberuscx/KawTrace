@@ -258,11 +258,90 @@ async function displayBlockDetails(blockHash) {
         confirmationsEl.textContent = confirmations.toLocaleString();
         txCountEl.textContent = block.tx.length.toLocaleString();
         
-        // Display transactions
-        await displayBlockTransactions(block);
+        // Display transactions and the mining reward from the same verified block.
+        await Promise.all([
+            displayBlockTransactions(block),
+            displayCoinbaseSummary(block, confirmations)
+        ]);
     } catch (error) {
         console.error('Error displaying block details:', error);
         UI.showNotification('Error', 'Failed to load block details.', 'error');
+    }
+}
+
+async function displayCoinbaseSummary(block, confirmations) {
+    const transactions = Array.isArray(block.tx) ? block.tx : [];
+    const firstEntry = transactions[0];
+    const firstData = typeof firstEntry === 'string'
+        ? await window.utilities.getTransactionDetails(firstEntry)
+        : firstEntry;
+    const coinbase = firstData?.tx || firstData;
+    if (!window.KawTraceCore.isCoinbaseTransaction(coinbase)) {
+        document.getElementById('coinbase-summary').hidden = true;
+        return;
+    }
+
+    document.getElementById('coinbase-summary').hidden = false;
+    const txidEl = document.getElementById('coinbase-txid');
+    const payoutEl = document.getElementById('coinbase-payout');
+    const subsidyEl = document.getElementById('coinbase-subsidy');
+    const feesEl = document.getElementById('coinbase-fees');
+    const outputCountEl = document.getElementById('coinbase-output-count');
+    const maturityEl = document.getElementById('coinbase-maturity');
+    const addressesEl = document.getElementById('coinbase-addresses');
+
+    txidEl.textContent = coinbase.txid;
+    txidEl.onclick = (event) => {
+        event.preventDefault();
+        window.app.navigateToTransactionDetails(coinbase.txid);
+    };
+
+    const payout = window.KawTraceCore.transactionOutputTotal(coinbase);
+    payoutEl.textContent = `${payout.toFixed(8)} RVN`;
+    outputCountEl.textContent = coinbase.vout.length.toLocaleString();
+    maturityEl.textContent = confirmations >= 100
+        ? `Mature (${confirmations.toLocaleString()} confirmations)`
+        : `Immature (${(100 - confirmations).toLocaleString()} confirmations remaining)`;
+
+    const destinations = new Set();
+    coinbase.vout.forEach(output => {
+        const script = output.scriptPubKey || {};
+        const addresses = Array.isArray(script.addresses) ? script.addresses : script.address ? [script.address] : [];
+        addresses.forEach(address => destinations.add(address));
+    });
+    addressesEl.replaceChildren();
+    if (!destinations.size) {
+        addressesEl.textContent = 'Unavailable';
+    } else {
+        destinations.forEach(address => {
+            const link = document.createElement('a');
+            link.href = '#';
+            link.className = 'coinbase-destination';
+            link.textContent = address;
+            link.addEventListener('click', event => {
+                event.preventDefault();
+                window.app.navigateToAddressDetails(address);
+            });
+            addressesEl.appendChild(link);
+        });
+    }
+
+    feesEl.textContent = 'Calculating...';
+    subsidyEl.textContent = 'Calculating...';
+    const regularTransactions = [];
+    for (const entry of transactions.slice(1)) {
+        const details = typeof entry === 'string' ? await window.utilities.getTransactionDetails(entry) : entry;
+        regularTransactions.push(details?.tx || details);
+    }
+    const fees = await Promise.all(regularTransactions.map(transaction => window.transactions.calculateTxFee(transaction)));
+    if (fees.every(Number.isFinite)) {
+        const totalFees = fees.reduce((total, fee) => total + fee, 0);
+        const rewardComponent = payout - totalFees;
+        feesEl.textContent = `${totalFees.toFixed(8)} RVN`;
+        subsidyEl.textContent = rewardComponent >= 0 ? `${rewardComponent.toFixed(8)} RVN` : 'Unavailable';
+    } else {
+        feesEl.textContent = 'Unavailable';
+        subsidyEl.textContent = 'Unavailable';
     }
 }
 
@@ -336,5 +415,6 @@ window.blocks = {
     loadBlocksPage,
     loadBlocksRange,
     displayBlockDetails,
-    displayBlockTransactions
+    displayBlockTransactions,
+    displayCoinbaseSummary
 };

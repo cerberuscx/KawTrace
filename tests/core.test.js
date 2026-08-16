@@ -7,6 +7,8 @@ const {
     formatAssetAmount,
     isCoinbaseTransaction,
     transactionOutputTotal,
+    classifyAssetOperation,
+    isChainReorganization,
     paginateNewestTxids,
     formatPercentage
 } = require('../scripts/core.js');
@@ -40,6 +42,21 @@ test('identifies coinbase transactions and totals RVN outputs', () => {
     assert.equal(isCoinbaseTransaction({ vin: [{ coinbase: 'abcd' }] }), true);
     assert.equal(isCoinbaseTransaction({ vin: [{ txid: 'abcd' }] }), false);
     assert.equal(transactionOutputTotal({ vout: [{ value: 1.25 }, { value: 2.5 }, { value: 0 }] }), 3.75);
+});
+
+test('classifies only explicit asset operations', () => {
+    assert.equal(classifyAssetOperation({ type: 'transfer_asset', reissuable: true }), 'Transfer');
+    assert.equal(classifyAssetOperation({ type: 'reissue_asset' }), 'Reissue');
+    assert.equal(classifyAssetOperation({ reissuable: true }), 'Asset output');
+});
+
+test('detects recent chain reorganizations without treating normal growth as a reorg', () => {
+    const previous = { height: 100, hash: 'old-tip' };
+    assert.equal(isChainReorganization(previous, { blocks: 100, bestblockhash: 'old-tip' }), false);
+    assert.equal(isChainReorganization(previous, { blocks: 100, bestblockhash: 'replacement' }), true);
+    assert.equal(isChainReorganization(previous, { blocks: 101, bestblockhash: 'new-tip' }, 'old-tip'), false);
+    assert.equal(isChainReorganization(previous, { blocks: 101, bestblockhash: 'new-tip' }, 'replacement'), true);
+    assert.equal(isChainReorganization(previous, { blocks: 99, bestblockhash: 'lower-tip' }), true);
 });
 
 test('paginates complete address history newest first without duplicates', () => {

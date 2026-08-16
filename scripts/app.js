@@ -279,7 +279,7 @@ async function search(term) {
         // 64 character hex string - could be block hash or txid
         try {
             // Try as block hash first
-            await window.utilities.getBlock(term);
+            await window.utilities.getBlock(term, 2, { quiet: true });
             navigateToBlockDetails(term);
             return;
         } catch (blockError) {
@@ -327,6 +327,7 @@ async function updateNetworkStatus() {
     const titleEl = document.getElementById('explorer-page-title');
     try {
         const info = await window.utilities.getBlockChainInfo();
+        const reorgDetected = await window.utilities.validateChainTip(info);
         const blockHeight = info.blocks;
         appState.currentBlockHeight = blockHeight;
 
@@ -339,6 +340,9 @@ async function updateNetworkStatus() {
         document.title = `${title} | Explorer`;
 
         appState.isConnected = true;
+        if (reorgDetected) {
+            UI.showNotification('Chain Reorganization', 'Recent cached blockchain data was invalidated and will be reloaded.', 'warning');
+        }
     } catch (error) {
         if (titleEl) titleEl.textContent = 'Ravencoin Blockchain';
         document.title = 'KawTrace | Ravencoin Explorer';
@@ -475,17 +479,18 @@ async function loadLatestTransactions({ silent = false } = {}) {
             rows.push(pendingRow);
         }
 
-        // A node can remove a transaction from its mempool immediately before
-        // the confirming block becomes visible through cached chain calls.
-        // Retain it briefly as Confirming so it does not disappear between states.
+        // Absence from one node's mempool does not prove confirmation,
+        // rejection, eviction, replacement, or conflict. Retain the observation
+        // briefly without assigning a cause.
         const now = Date.now();
         for (const [txid, pendingRow] of pendingTransitionCache) {
             if (confirmedTxids.has(txid) || mempool[txid]) continue;
-            if (now - pendingRow.seenAt > 120000) {
+            pendingRow.missingSince = pendingRow.missingSince || now;
+            if (now - pendingRow.missingSince > 300000) {
                 pendingTransitionCache.delete(txid);
                 continue;
             }
-            rows.push({ ...pendingRow, status: 'confirming' });
+            rows.push({ ...pendingRow, status: 'not-visible' });
         }
 
         rows.sort((a, b) => (b.time || 0) - (a.time || 0));
@@ -496,7 +501,7 @@ async function loadLatestTransactions({ silent = false } = {}) {
         const fragment = document.createDocumentFragment();
         if (rows.length === 0) {
             const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="4" class="loading-row">No recent non-coinbase transactions found</td>';
+            row.innerHTML = '<td colspan="4" class="loading-row">No recent user transactions found</td>';
             fragment.appendChild(row);
         }
         rows.forEach(txData => {
@@ -510,7 +515,7 @@ async function loadLatestTransactions({ silent = false } = {}) {
                 <td><a href="#" data-txid="${tx.txid}" class="tx-link">${formatHash(tx.txid)}</a></td>
                 <td>${formatTime(txData.time)}</td>
                 <td>${totalValue.toFixed(8)} RVN</td>
-                <td><span class="status-badge status-${txData.status}">${txData.status === 'pending' ? 'Pending' : txData.status === 'confirming' ? 'Confirming' : 'Confirmed'}</span></td>
+                <td><span class="status-badge status-${txData.status}">${txData.status === 'pending' ? 'Pending' : txData.status === 'not-visible' ? 'No Longer Visible' : 'Confirmed'}</span></td>
             `;
             fragment.appendChild(row);
         });
@@ -575,7 +580,7 @@ function createMempoolChart(mempoolInfo, history = []) {
             emptyState.setAttribute('role', 'status');
             container.appendChild(emptyState);
         }
-        emptyState.textContent = 'The mempool is currently empty. History will appear as samples are collected.';
+        emptyState.textContent = 'The selected RPC node mempool is currently empty. History will appear as samples are collected.';
         document.getElementById('mempool-pending').textContent = '0';
         document.getElementById('mempool-fees').textContent = Number.isFinite(mempoolInfo.total_fee)
             ? `${mempoolInfo.total_fee.toFixed(8)} RVN`

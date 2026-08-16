@@ -250,7 +250,8 @@ async function displayTransactionDetails(txid) {
         // Calculate fee (for simplicity, we'll just show "N/A" as calculating the fee requires looking up input values)
         txFeeEl.textContent = 'Calculating...';
         calculateTxFee(tx).then(fee => {
-            txFeeEl.textContent = fee !== null ? `${fee.toFixed(8)} RVN` : 'N/A';
+            if (txIdEl.textContent !== tx.txid) return;
+            txFeeEl.textContent = Number.isFinite(fee) ? `${fee.toFixed(8)} RVN` : 'Unavailable';
         });
         
         txInputCountEl.textContent = tx.vin.length;
@@ -530,7 +531,8 @@ function displayTxOutputs(tx) {
     });
 }
 
-// Display transaction assets
+// Display each decoded asset-bearing output without inferring senders, change,
+// issuance, or reissuance from unrelated asset metadata.
 function displayTxAssets(tx) {
     const assetsListEl = document.getElementById('tx-assets-list');
     
@@ -538,7 +540,7 @@ function displayTxAssets(tx) {
     const hasAssets = tx.vout.some(vout => vout.scriptPubKey && vout.scriptPubKey.asset);
     
     if (!hasAssets) {
-        assetsListEl.innerHTML = '<p>No assets transferred in this transaction.</p>';
+        assetsListEl.innerHTML = '<p>No decoded asset outputs in this transaction.</p>';
         return;
     }
     
@@ -549,71 +551,39 @@ function displayTxAssets(tx) {
         <thead>
             <tr>
                 <th>Asset Name</th>
-                <th>Type</th>
+                <th>Output</th>
+                <th>Operation</th>
                 <th>Amount</th>
-                <th>From</th>
-                <th>To</th>
+                <th>Destination</th>
             </tr>
         </thead>
         <tbody></tbody>
     `;
     
     const assetsBody = assetsTable.querySelector('tbody');
-    const assetMap = new Map();
-    
-    // Process each output with assets
+    // Preserve output boundaries. Aggregating by name would hide multiple
+    // destinations and could incorrectly merge recipient and change outputs.
     tx.vout.forEach(vout => {
         if (vout.scriptPubKey && vout.scriptPubKey.asset) {
             const asset = vout.scriptPubKey.asset;
-            const assetName = asset.name;
-            
-            // Determine asset type (new, transfer, reissue)
-            let assetType = 'Transfer';
-            if (asset.issueTxid === tx.txid) {
-                assetType = 'New Issue';
-            } else if (asset.reissuable) {
-                // This is a simplification - to truly determine if this is a reissue
-                // we would need to check if this transaction changes the asset properties
-                assetType = 'Reissue';
-            }
-            
-            // Get recipient address
-            let toAddress = 'Unknown';
-            if (vout.scriptPubKey.addresses && vout.scriptPubKey.addresses.length > 0) {
-                toAddress = vout.scriptPubKey.addresses[0];
-            } else if (vout.scriptPubKey.address) {
-                toAddress = vout.scriptPubKey.address;
-            }
-            
-            // Track asset transfer
-            if (!assetMap.has(assetName)) {
-                assetMap.set(assetName, {
-                    name: assetName,
-                    type: assetType,
-                    amount: asset.amount,
-                    from: 'Unknown', // Will be determined from inputs
-                    to: toAddress
-                });
-            } else {
-                // Add to existing asset amount
-                const existingAsset = assetMap.get(assetName);
-                existingAsset.amount += asset.amount;
-                // Keep the same type, as it should be consistent for one asset in a tx
-            }
-        }
-    });
-    
-    // Add asset rows to table
-    assetMap.forEach(asset => {
+            const addresses = Array.isArray(vout.scriptPubKey.addresses)
+                ? vout.scriptPubKey.addresses
+                : vout.scriptPubKey.address ? [vout.scriptPubKey.address] : [];
+            const destination = addresses.length
+                ? addresses.map(address => `<a href="#" class="address-link" data-address="${address}">${address}</a>`).join('<br>')
+                : 'Unavailable';
+            const operation = window.KawTraceCore.classifyAssetOperation(asset);
+            const amount = Number(asset.amount);
         const row = document.createElement('tr');
         row.innerHTML = `
             <td><a href="#" class="asset-link" data-asset="${asset.name}">${asset.name}</a></td>
-            <td>${asset.type}</td>
-            <td>${asset.amount.toLocaleString()}</td>
-            <td>${asset.from === 'Unknown' ? 'Unknown' : `<a href="#" class="address-link" data-address="${asset.from}">${asset.from}</a>`}</td>
-            <td>${asset.to === 'Unknown' ? 'Unknown' : `<a href="#" class="address-link" data-address="${asset.to}">${asset.to}</a>`}</td>
+                <td>${Number.isInteger(vout.n) ? vout.n : 'Unavailable'}</td>
+                <td>${operation}</td>
+                <td>${Number.isFinite(amount) ? amount.toLocaleString(undefined, { maximumFractionDigits: 8 }) : 'Unavailable'}</td>
+                <td>${destination}</td>
         `;
         assetsBody.appendChild(row);
+        }
     });
     
     // Replace content with the assets table
@@ -646,14 +616,13 @@ async function calculateTxFee(tx) {
     }
     
     try {
-        let inputValue = 0;
-        let outputValue = 0;
+        let inputSatoshis = 0;
+        let outputSatoshis = 0;
         
         // Calculate total output value
         for (const vout of tx.vout) {
-            if (vout.value) {
-                outputValue += vout.value;
-            }
+            const value = Number(vout.value);
+            if (Number.isFinite(value)) outputSatoshis += Math.round(value * 1e8);
         }
         
         // Calculate total input value (requires fetching previous transactions)
@@ -662,9 +631,8 @@ async function calculateTxFee(tx) {
                 try {
                     const prevTx = await window.utilities.getTransactionDetails(vin.txid);
                     const prevOut = prevTx.tx.vout[vin.vout];
-                    if (prevOut && prevOut.value) {
-                        inputValue += prevOut.value;
-                    }
+                    const value = Number(prevOut?.value);
+                    if (Number.isFinite(value)) inputSatoshis += Math.round(value * 1e8);
                 } catch (error) {
                     console.warn(`Failed to get previous transaction ${vin.txid}:`, error);
                     // If we can't get all inputs, we can't calculate the fee accurately
@@ -677,8 +645,8 @@ async function calculateTxFee(tx) {
         }
         
         // Fee is input value minus output value
-        const fee = inputValue - outputValue;
-        return fee >= 0 ? fee : null; // Sanity check: fee should be non-negative
+        const feeSatoshis = inputSatoshis - outputSatoshis;
+        return feeSatoshis >= 0 ? feeSatoshis / 1e8 : null;
     } catch (error) {
         console.error('Error calculating transaction fee:', error);
         return null;

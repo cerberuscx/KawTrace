@@ -8,7 +8,7 @@ KawTrace runs entirely in the browser. There is no account, application server, 
 
 ## Beta status
 
-The current release is **v0.1.0-beta.1**. Mainnet operation and mainnet/testnet endpoint switching have passed the documented acceptance run. Beta users should report reproducible explorer failures through the [GitHub issue tracker](https://github.com/cerberuscx/KawTrace/issues/new/choose). Read [Beta Testing](./docs/BETA.md) before reporting endpoint or data problems.
+The current release is **v0.1.0-beta.2**. Mainnet operation and mainnet/testnet endpoint switching have passed the documented acceptance run. Beta users should report reproducible explorer failures through the [GitHub issue tracker](https://github.com/cerberuscx/KawTrace/issues/new/choose). Read [Beta Testing](./docs/BETA.md) before reporting endpoint or data problems.
 
 ## Features
 
@@ -33,7 +33,7 @@ The hosted version updates automatically when a new release is deployed.
 
 ### Single-file version
 
-The portable build packages KawTrace into one `index.html` file. Download **[KawTrace v0.1.0 beta 1](https://github.com/cerberuscx/KawTrace/releases/download/v0.1.0-beta.1/KawTrace-v0.1.0-beta.1.html)**, save it anywhere, and open it directly in a browser.
+The portable build packages KawTrace into one `index.html` file. Download **[KawTrace v0.1.0 beta 2](https://github.com/cerberuscx/KawTrace/releases/download/v0.1.0-beta.2/KawTrace-v0.1.0-beta.2.html)**, save it anywhere, and open it directly in a browser.
 
 Browser security and Flatpak filesystem restrictions can prevent a local HTML file from loading or connecting correctly. In that case, use the hosted version.
 
@@ -60,7 +60,7 @@ Never expose Ravencoin Core RPC directly to a browser or the public internet. A 
 
 KawTrace stores settings, cached explorer data, and up to 24 hours of real mempool samples in the browser. This information remains on the device and is separated by website origin.
 
-Mempool history is collected only while KawTrace is open. Missing periods are left as gaps rather than replaced with fabricated data. Clearing browser site data removes the stored history and settings.
+Mempool history represents the selected RPC node, not a canonical network-wide mempool, and is collected only while KawTrace is open. Missing periods are left as gaps rather than replaced with fabricated data. Clearing browser site data removes the stored history and settings.
 
 ## Privacy
 

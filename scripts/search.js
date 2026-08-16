@@ -50,7 +50,7 @@ const Search = {
         // Check if it's a block hash (64 hex characters)
         if (/^[a-fA-F0-9]{64}$/.test(query)) {
             try {
-                await window.utilities.getBlock(query);
+                await window.utilities.getBlock(query, 2, { quiet: true });
                 return { type: 'block_hash', value: query };
             } catch (blockError) {
                 try {

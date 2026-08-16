@@ -2,6 +2,27 @@
 
 All notable KawTrace changes are recorded here.
 
+## [0.1.0-beta.2] - 2026-08-16
+
+Accuracy and transaction-semantics beta.
+
+### Added
+
+- Coinbase payout, destination, maturity, fee, and reward-component details on block pages
+- Recent-chain reorganization detection and cache invalidation
+- Explicit node-local mempool disclosure
+- Per-output asset movement details
+
+### Changed
+
+- Renamed output totals to `Total RVN Outputs` and documented change and burn outputs
+- Removed speculative asset reissue classification
+- Replaced ambiguous vanished-mempool state with `No Longer Visible`
+- Kept confirmation and coinbase maturity counts current when detail data is cached
+- Calculated transaction fees in Ravencoin atomic units
+
+[0.1.0-beta.2]: https://github.com/cerberuscx/KawTrace/releases/tag/v0.1.0-beta.2
+
 ## [0.1.0-beta.1] - 2026-08-16
 
 First public Ravencoin mainnet beta.

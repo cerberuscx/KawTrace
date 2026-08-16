@@ -655,6 +655,30 @@ main {
     margin-top: 1rem;
 }
 
+.data-disclosure {
+    margin: -0.5rem 0 1rem;
+    color: var(--text-light);
+    font-size: 0.88rem;
+}
+
+.coinbase-summary {
+    margin-bottom: 2rem;
+}
+
+.coinbase-summary .block-summary {
+    margin-bottom: 1rem;
+}
+
+.coinbase-destination {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.status-not-visible {
+    background-color: rgba(149, 165, 166, 0.2);
+    color: var(--text-light);
+}
+
 /* ======= TABLE STYLES ======= */
 .table-container {
     overflow-x: auto;

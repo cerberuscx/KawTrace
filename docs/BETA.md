@@ -1,6 +1,6 @@
 # KawTrace Beta Testing
 
-KawTrace `v0.1.0-beta.1` is the first public Ravencoin beta. The hosted explorer is the primary beta target. The portable single-file release is the secondary target.
+KawTrace `v0.1.0-beta.2` is the current public Ravencoin beta. The hosted explorer is the primary beta target. The portable single-file release is the secondary target.
 
 ## Beta objectives
 

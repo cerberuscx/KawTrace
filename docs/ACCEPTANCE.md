@@ -1,5 +1,32 @@
 # Release Acceptance
 
+## v0.1.0-beta.2
+
+Accuracy acceptance completed on 2026-08-16 against the generated Pages package and Raven Rebels mainnet endpoint.
+
+### Automated checks
+
+- Nine core tests passed
+- JavaScript syntax checks passed
+- Portable and restricted Pages builds completed
+- Explicit asset-operation and chain-reorganization tests passed
+
+### Browser checks
+
+- User-transaction and node-local mempool disclosures rendered
+- `Total RVN Outputs` terminology rendered across transaction tables
+- A coinbase-only block showed zero fees and matching payout and reward component
+- A block with a user transaction showed an exact `0.00624732 RVN` fee separation from its `1250.00624732 RVN` miner payout
+- Coinbase transaction, payout destination, output count, and maturity rendered without console errors
+- Mainnet remained connected throughout the accuracy pass
+
+### Deferred
+
+- Screenshot documentation
+- Automated browser CI
+- Regtest acceptance
+- Sustained public-endpoint load testing
+
 ## v0.1.0-beta.1
 
 Acceptance run completed on 2026-08-16 against the generated Pages package.

@@ -1,6 +1,6 @@
 {
   "name": "kawtrace",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "private": true,
   "description": "Serverless Ravencoin block and asset explorer",
   "scripts": {
