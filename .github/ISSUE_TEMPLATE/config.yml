@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/cerberuscx/KawTrace/security/advisories/new
+    about: Report vulnerabilities privately. Do not publish exploitable details in an issue.
+  - name: Beta testing guide
+    url: https://github.com/cerberuscx/KawTrace/blob/main/docs/BETA.md
+    about: Read the beta scope, reporting requirements, and accepted limitations.

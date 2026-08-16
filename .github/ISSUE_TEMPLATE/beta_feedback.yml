@@ -1,0 +1,41 @@
+name: Beta feedback
+description: Record verified usability feedback that is not a defect or security report.
+title: "[Beta feedback]: "
+body:
+  - type: dropdown
+    id: distribution
+    attributes:
+      label: Distribution used
+      options:
+        - Hosted GitHub Pages explorer
+        - Portable single-file HTML
+        - Local source checkout
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and operating system
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow tested
+      description: Describe the explorer task and selected public endpoint preset.
+    validations:
+      required: true
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Feedback
+      description: State the observed usability problem and the concrete outcome required.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed credentials, tokens, private keys, recovery phrases, private endpoint URLs, and personal information.
+          required: true

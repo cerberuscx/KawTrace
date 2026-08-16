@@ -6,6 +6,10 @@ Use the hosted explorer at **[cerberuscx.github.io/KawTrace](https://cerberuscx.
 
 KawTrace runs entirely in the browser. There is no account, application server, database, or installation process. It connects to a compatible Ravencoin RPC proxy and can also be configured to use another public or self-hosted endpoint.
 
+## Beta status
+
+The current release is **v0.1.0-beta.1**. Mainnet operation and mainnet/testnet endpoint switching have passed the documented acceptance run. Beta users should report reproducible explorer failures through the [GitHub issue tracker](https://github.com/cerberuscx/KawTrace/issues/new/choose). Read [Beta Testing](./docs/BETA.md) before reporting endpoint or data problems.
+
 ## Features
 
 - Live Ravencoin network statistics

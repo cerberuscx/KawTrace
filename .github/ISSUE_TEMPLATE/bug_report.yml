@@ -1,0 +1,90 @@
+name: Beta bug report
+description: Report a reproducible KawTrace explorer failure or incorrect result.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove credentials, tokens, private keys, recovery phrases, private endpoint URLs, and unrelated personal blockchain activity. Report security vulnerabilities privately through the Security tab.
+  - type: input
+    id: version
+    attributes:
+      label: KawTrace version
+      placeholder: v0.1.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: distribution
+    attributes:
+      label: Distribution
+      options:
+        - Hosted GitHub Pages explorer
+        - Portable single-file HTML
+        - Local source checkout
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and operating system
+      placeholder: LibreWolf 140 on Linux Mint 22
+    validations:
+      required: true
+  - type: input
+    id: endpoint
+    attributes:
+      label: RPC endpoint preset
+      description: Name the preset. Provide only a sanitized URL for a custom proxy.
+      placeholder: Ting Mainnet
+    validations:
+      required: true
+  - type: dropdown
+    id: view
+    attributes:
+      label: Affected view
+      options:
+        - Dashboard
+        - Blocks
+        - Transactions
+        - Addresses
+        - Assets
+        - Search
+        - Settings or RPC connection
+        - Portable build
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide a minimal numbered sequence and relevant public blockchain identifiers.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Observed behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include console errors or screenshots only after removing sensitive data.
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed credentials, tokens, private keys, recovery phrases, private endpoint URLs, and unrelated personal information.
+          required: true
+        - label: This is not a security vulnerability requiring private reporting.
+          required: true
