@@ -402,7 +402,8 @@ function addSettingsFormListeners(popover) {
             // Show success notification
             window.ui.showNotification('Settings Saved', 'Your settings have been saved successfully.', 'success');
             // Apply the new settings
-            applySettings();
+            const rpcChanged = await applySettings();
+            if (rpcChanged) window.location.reload();
         });
     }
     
@@ -489,10 +490,14 @@ async function testRpcEndpoint(url) {
 // Apply settings to the application
 async function applySettings() {
     const settings = await getSettings();
+    let rpcChanged = false;
     
     // Apply RPC URL to utility functions
     if (window.utilities && typeof window.utilities.setRpcUrl === 'function') {
-        window.utilities.setRpcUrl(settings.rpcUrl);
+        rpcChanged = await window.utilities.setRpcUrl(settings.rpcUrl);
+        // Changing networks clears endpoint-specific cached blockchain data,
+        // including the settings record. Restore the selection after clearing.
+        if (rpcChanged) await saveSettings(settings);
     }
     
     // Apply max concurrent requests
@@ -509,6 +514,7 @@ async function applySettings() {
     applyTheme(settings.uiSettings.theme);
     
     console.log("Settings applied:", settings);
+    return rpcChanged;
 }
 
 // Apply theme

@@ -29,7 +29,7 @@ The hosted version updates automatically when a new release is deployed.
 
 ### Single-file version
 
-The portable build packages KawTrace into one `index.html` file. Save the portable file anywhere and open it directly in a browser.
+The portable build packages KawTrace into one `index.html` file. Download **[KawTrace v0.1.0 beta 1](https://github.com/cerberuscx/KawTrace/releases/download/v0.1.0-beta.1/KawTrace-v0.1.0-beta.1.html)**, save it anywhere, and open it directly in a browser.
 
 Browser security and Flatpak filesystem restrictions can prevent a local HTML file from loading or connecting correctly. In that case, use the hosted version.
 
@@ -90,6 +90,7 @@ Development and source verification require Node.js:
 npm test
 npm run check
 npm run build:single
+npm run build:pages
 ```
 
 The generated portable build is written to `dist/index.html`.

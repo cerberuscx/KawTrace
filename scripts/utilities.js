@@ -46,11 +46,15 @@ let cacheMisses = 0;
 
 
 // Function to set RPC URL
-function setRpcUrl(url) {
+async function setRpcUrl(url) {
   if (url && typeof url === 'string') {
+    const changed = RPC_URL !== url;
     RPC_URL = url;
     console.log('RPC URL updated:', url);
+    if (changed) await clearAllCaches();
+    return changed;
   }
+  return false;
 }
 
 // Function to set max concurrent requests

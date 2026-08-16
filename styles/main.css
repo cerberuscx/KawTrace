@@ -571,6 +571,7 @@ main {
     border-radius: var(--border-radius);
     box-shadow: var(--shadow);
     padding: 1.5rem;
+    min-width: 0;
 }
 
 [data-theme="dark"] .dashboard-card {
@@ -593,6 +594,7 @@ main {
     border-radius: var(--border-radius);
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 [data-theme="dark"] .stat-item {
@@ -608,6 +610,7 @@ main {
 .stat-value {
     font-size: 1.2rem;
     font-weight: 600;
+    overflow-wrap: anywhere;
 }
 
 .latest-blocks, .latest-transactions {
@@ -656,6 +659,7 @@ main {
 .table-container {
     overflow-x: auto;
     margin-bottom: 1rem;
+    max-width: 100%;
 }
 
 table {
@@ -2239,5 +2243,58 @@ tbody tr:hover {
         --header-row-height: 150px;
         --nav-row-height: 130px;
         --top-chrome-height: calc(var(--header-row-height) + var(--nav-row-height));
+    }
+}
+
+/* Content breakpoints are repeated after the base rules so the mobile layout
+   wins the cascade. */
+@media (max-width: 1200px) {
+    .dashboard-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .network-stats,
+    .latest-blocks,
+    .latest-transactions,
+    .mempool-activity {
+        grid-column: span 1;
+    }
+
+    .stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .block-summary,
+    .transaction-summary,
+    .address-summary,
+    .asset-summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .address-field,
+    .asset-name,
+    .ipfs-image-container {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .stat-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .footer {
+        position: static;
+        height: auto;
+    }
+
+    .footer-content {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .app-container {
+        padding-bottom: 0;
     }
 }
